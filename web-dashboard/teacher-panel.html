@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Control Panel - Smart EduBuddy</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .status-bar {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+
+        .status-dot.online {
+            background: #28a745;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .button.secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .preset-questions {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .preset-btn {
+            padding: 12px;
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95em;
+        }
+
+        .preset-btn:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .card-reference {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .card-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .card-item {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #dee2e6;
+            font-size: 0.9em;
+        }
+
+        .card-id {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👨‍🏫 Teacher Control Panel</h1>
+        <div class="subtitle">Smart EduBuddy Management System</div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="mqtt-dot"></div>
+                <span>MQTT: <strong id="mqtt-text">Connecting...</strong></span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="device-dot"></div>
+                <span>Device: <strong id="device-text">Offline</strong></span>
+            </div>
+        </div>
+
+        <div class="alert" id="alert">
+            <span id="alert-text"></span>
+        </div>
+
+        <!-- Quick Start Presets -->
+        <div class="section">
+            <div class="section-title">📚 Quick Start Questions</div>
+            <div class="preset-questions">
+                <button class="preset-btn" onclick="loadPreset('01RED', 'Find the Color RED')">🔴 Color Red</button>
+                <button class="preset-btn" onclick="loadPreset('02BLUE', 'Find the Color BLUE')">🔵 Color Blue</button>
+                <button class="preset-btn" onclick="loadPreset('03GREEN', 'Find the Color GREEN')">🟢 Color Green</button>
+                <button class="preset-btn" onclick="loadPreset('04YELLOW', 'Find the Color YELLOW')">🟡 Color Yellow</button>
+                <button class="preset-btn" onclick="loadPreset('07CIRCLE', 'Find the CIRCLE')">⭕ Circle</button>
+                <button class="preset-btn" onclick="loadPreset('08SQUARE', 'Find the SQUARE')">🟦 Square</button>
+                <button class="preset-btn" onclick="loadPreset('09TRIANGLE', 'Find the TRIANGLE')">🔺 Triangle</button>
+                <button class="preset-btn" onclick="loadPreset('11STAR', 'Find the STAR')">⭐ Star</button>
+            </div>
+        </div>
+
+        <!-- Custom Question -->
+        <div class="section">
+            <div class="section-title">✏️ Create Custom Question</div>
+            
+            <div class="form-group">
+                <label for="answer-id">Correct Answer (Card ID):</label>
+                <select id="answer-id">
+                    <option value="">-- Select Correct Answer --</option>
+                    <optgroup label="Colors">
+                        <option value="01RED">01RED - Red</option>
+                        <option value="02BLUE">02BLUE - Blue</option>
+                        <option value="03GREEN">03GREEN - Green</option>
+                        <option value="04YELLOW">04YELLOW - Yellow</option>
+                        <option value="05ORANGE">05ORANGE - Orange</option>
+                        <option value="06PURPLE">06PURPLE - Purple</option>
+                    </optgroup>
+                    <optgroup label="Shapes">
+                        <option value="07CIRCLE">07CIRCLE - Circle</option>
+                        <option value="08SQUARE">08SQUARE - Square</option>
+                        <option value="09TRIANGLE">09TRIANGLE - Triangle</option>
+                        <option value="10RECTANGLE">10RECTANGLE - Rectangle</option>
+                        <option value="11STAR">11STAR - Star</option>
+                        <option value="12HEART">12HEART - Heart</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="question-text">Question Text (shown on screen):</label>
+                <textarea id="question-text" placeholder="Example: Find the Color Red"></textarea>
+            </div>
+
+            <button class="button" onclick="sendQuestion()">
+                📤 Send Question to Students
+            </button>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="section">
+            <div class="section-title">🎮 Game Controls</div>
+            <div class="button-group">
+                <button class="button secondary" onclick="clearQuestion()">
+                    🔄 Clear Question
+                </button>
+                <button class="button secondary" onclick="resetScores()">
+                    📊 Reset Scores
+                </button>
+            </div>
+        </div>
+
+        <!-- Card Reference -->
+        <div class="card-reference">
+            <strong>📋 Card Reference Guide</strong>
+            <div class="card-list">
+                <div class="card-item">
+                    <div class="card-id">01RED</div>
+                    <div>Red Color</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">02BLUE</div>
+                    <div>Blue Color</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">03GREEN</div>
+                    <div>Green Color</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">04YELLOW</div>
+                    <div>Yellow Color</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">07CIRCLE</div>
+                    <div>Circle Shape</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">08SQUARE</div>
+                    <div>Square Shape</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">09TRIANGLE</div>
+                    <div>Triangle Shape</div>
+                </div>
+                <div class="card-item">
+                    <div class="card-id">11STAR</div>
+                    <div>Star Shape</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="teacher-panel.js"></script>
+</body>
+</html>
