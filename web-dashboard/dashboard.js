@@ -47,7 +47,10 @@ const TF_CARD_MAP = {
 };
 // ---------------------------------------------------------------------
 
-const LEADERBOARD_KEY = 'edubuddy_leaderboard_v1';
+const JSONBIN_ID  = '69e457a9aaba88219714735f';
+const JSONBIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+
 const TOP_N = 3;
 
 const TIMING = {
@@ -304,7 +307,8 @@ let session = null;
 // }
 
 let mqttClient;
-let pendingTimers = []; // track setTimeouts so we can cancel on session reset
+let pendingTimers = [];
+let leaderboardCache = null;
 
 // =====================================================================
 // MQTT
@@ -615,33 +619,42 @@ function totalQuestionsInSession() {
 // LEADERBOARD (localStorage)
 // =====================================================================
 
-function loadLeaderboard() {
-    try {
-        const raw = localStorage.getItem(LEADERBOARD_KEY);
-        if (!raw) return emptyLeaderboard();
-        const parsed = JSON.parse(raw);
-        // Make sure all keys exist
-        const empty = emptyLeaderboard();
-        for (const k of Object.keys(empty)) {
-            if (!Array.isArray(parsed[k])) parsed[k] = [];
-        }
-        return parsed;
-    } catch (e) {
-        console.warn('Leaderboard load failed, starting fresh:', e);
-        return emptyLeaderboard();
-    }
-}
-
 function emptyLeaderboard() {
     return { color: [], alphabet: [], shape: [], number: [], overall: [] };
 }
 
-function saveLeaderboard(board) {
+async function fetchLeaderboardFromCloud() {
     try {
-        localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(board));
+        const res = await fetch(JSONBIN_URL + '/latest', {
+            headers: { 'X-Master-Key': JSONBIN_KEY }
+        });
+        const json = await res.json();
+        leaderboardCache = json.record;
+        const empty = emptyLeaderboard();
+        for (const k of Object.keys(empty)) {
+            if (!Array.isArray(leaderboardCache[k])) leaderboardCache[k] = [];
+        }
+        console.log('Leaderboard loaded from cloud.');
     } catch (e) {
-        console.warn('Leaderboard save failed:', e);
+        console.warn('Failed to load leaderboard from cloud, starting fresh:', e);
+        leaderboardCache = emptyLeaderboard();
     }
+}
+
+function loadLeaderboard() {
+    return leaderboardCache || emptyLeaderboard();
+}
+
+function saveLeaderboard(board) {
+    leaderboardCache = board;
+    fetch(JSONBIN_URL, {
+        method: 'PUT',
+        headers: {
+            'X-Master-Key': JSONBIN_KEY,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(board)
+    }).catch(e => console.warn('Failed to save leaderboard to cloud:', e));
 }
 
 function pushToLeaderboard(category, name, score) {
@@ -780,5 +793,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('Smart EduBuddy dashboard starting...');
     showScreen('idle-screen');
     await loadQuestionBank();
+    await fetchLeaderboardFromCloud();
     initializeMQTT();
 });
