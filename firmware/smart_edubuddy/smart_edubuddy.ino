@@ -1,7 +1,31 @@
 /*
- * Smart EduBuddy - NodeMCU RFID Station
- * Hardware: NodeMCU ESP8266 + MFRC522 RFID Reader
- * Purpose: Read RFID cards and send to MQTT broker
+ * Smart EduBuddy - ESP32 RFID + 4-Button Station
+ * Hardware: ESP32 dev board + MFRC522 RFID reader + 4 push buttons
+ *
+ * Publishes raw input events to MQTT. The web dashboard owns all
+ * game logic, scoring, and question state — this firmware only
+ * reports what the student physically did.
+ *
+ * MQTT publishes on edubuddy/answer:
+ *   - "BTN_A" / "BTN_B" / "BTN_C" / "BTN_D" on button press
+ *   - "<UPPERCASE_HEX_UID>" on RFID scan (e.g. "DEADBEEF")
+ *
+ * Pin map (ESP32):
+ *   RFID SDA/SS  -> GPIO 5
+ *   RFID SCK     -> GPIO 18
+ *   RFID MOSI    -> GPIO 23
+ *   RFID MISO    -> GPIO 19
+ *   RFID RST     -> GPIO 22
+ *   RFID 3.3V    -> 3V3
+ *   RFID GND     -> GND
+ *   Button A     -> GPIO 25  (other leg to GND)
+ *   Button B     -> GPIO 26  (other leg to GND)
+ *   Button C     -> GPIO 27  (other leg to GND)
+ *   Button D     -> GPIO 32  (other leg to GND)
+ *   Status LED   -> GPIO 2   (built-in on most ESP32 dev boards)
+ *
+ * Pin map (NodeMCU ESP8266 fallback — only 2 buttons fit alongside RFID):
+ *   See #ifdef branches below. Use the ESP32 build for the full feature set.
  */
 
 #ifdef ESP32
@@ -13,89 +37,110 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 
-// WiFi Configuration
+// ----- WiFi Configuration -----
 const char *ssid = "YOUR_WIFI_SSID";
 const char *password = "YOUR_WIFI_PASSWORD";
 
-// MQTT Configuration
-const char *mqtt_server =
-    "broker.hivemq.com"; // Free public broker (replace with your own)
+// ----- MQTT Configuration -----
+const char *mqtt_server = "broker.hivemq.com"; // Public broker (replace with your own for privacy)
 const int mqtt_port = 1883;
 const char *mqtt_client_id = "EduBuddy_Station_01";
 
-// MQTT Topics
-const char *topic_question =
-    "edubuddy/question";                      // Subscribe: Receive questions
-const char *topic_answer = "edubuddy/answer"; // Publish: Send student answers
-const char *topic_status = "edubuddy/status"; // Publish: Device status
+// ----- MQTT Topics -----
+const char *topic_answer = "edubuddy/answer"; // Publish: button presses + card UIDs
+const char *topic_status = "edubuddy/status"; // Publish: device online/offline
 
-// RFID Pin Configuration
+// ----- Pin Configuration -----
 #ifdef ESP32
-#define RST_PIN 22 // GPIO 22
-#define SS_PIN 5   // GPIO 5
-                                              // Status LED
-#define LED_PIN 2 // GPIO 2 (Built-in LED)
+// RFID pins
+#define RST_PIN 22
+#define SS_PIN 5
+// Button pins (active-low, INPUT_PULLUP)
+#define BTN_A_PIN 25
+#define BTN_B_PIN 26
+#define BTN_C_PIN 27
+#define BTN_D_PIN 32
+// Status LED (built-in on most ESP32 dev boards)
+#define LED_PIN 2
+#define LED_ACTIVE_HIGH true // ESP32 built-in LED is active HIGH on most boards
 #else
-                                              // NodeMCU pins
-#define RST_PIN D3 // GPIO 0
-#define SS_PIN D4  // GPIO 2
-                                              // Status LED
-#define LED_PIN D0 // GPIO 16 (built-in LED on some NodeMCU)
+// NodeMCU ESP8266 fallback (only 2 buttons fit cleanly with RFID)
+#define RST_PIN D3
+#define SS_PIN D4
+#define BTN_A_PIN D1
+#define BTN_B_PIN D2
+#define BTN_C_PIN -1 // Not wired on NodeMCU build
+#define BTN_D_PIN -1 // Not wired on NodeMCU build
+#define LED_PIN D0
+#define LED_ACTIVE_HIGH false // NodeMCU built-in LED is active LOW
 #endif
 
-// Initialize RFID reader
+// ----- Hardware -----
 MFRC522 mfrc522(SS_PIN, RST_PIN);
-
-// Initialize WiFi and MQTT clients
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Variables
-String currentQuestion = "";
-String correctAnswerId = "";
+// ----- Timing / debounce -----
 unsigned long lastCardReadTime = 0;
-const unsigned long cardReadDelay = 2000; // Prevent multiple reads (2 seconds)
+const unsigned long cardReadDelay = 1500; // ms between RFID reads
 
+unsigned long lastButtonTime = 0;
+const unsigned long buttonDebounce = 250; // ms global debounce across all buttons
+
+// ----- LED helpers (handle both polarities) -----
+inline void ledOn()  { digitalWrite(LED_PIN, LED_ACTIVE_HIGH ? HIGH : LOW); }
+inline void ledOff() { digitalWrite(LED_PIN, LED_ACTIVE_HIGH ? LOW : HIGH); }
+
+void blinkLED(int times, int delayMs) {
+  for (int i = 0; i < times; i++) {
+    ledOn();
+    delay(delayMs);
+    ledOff();
+    delay(delayMs);
+  }
+}
+
+// ----- Setup -----
 void setup() {
   Serial.begin(115200);
   delay(100);
 
-  // Initialize LED
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH); // LED off initially (NodeMCU LED is active LOW)
+  ledOff();
 
-  // Initialize SPI and RFID
+  // Buttons: active-low with internal pull-up
+  pinMode(BTN_A_PIN, INPUT_PULLUP);
+  pinMode(BTN_B_PIN, INPUT_PULLUP);
+  if (BTN_C_PIN >= 0) pinMode(BTN_C_PIN, INPUT_PULLUP);
+  if (BTN_D_PIN >= 0) pinMode(BTN_D_PIN, INPUT_PULLUP);
+
+  // RFID
   SPI.begin();
   mfrc522.PCD_Init();
 
-  Serial.println("\n=== Smart EduBuddy RFID Station ===");
+  Serial.println("\n=== Smart EduBuddy Station (ESP32 + RFID + 4 buttons) ===");
   Serial.println("Initializing...");
 
-  // Connect to WiFi
   setupWiFi();
 
-  // Setup MQTT
   client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(mqttCallback);
-
-  // Connect to MQTT
   reconnectMQTT();
 
-  Serial.println("System Ready!");
-  Serial.println("Waiting for RFID cards...");
+  Serial.println("System Ready! Waiting for input...");
 }
 
+// ----- Main loop -----
 void loop() {
-  // Maintain MQTT connection
   if (!client.connected()) {
     reconnectMQTT();
   }
   client.loop();
 
-  // Check for RFID cards
+  checkButtons();
   checkRFIDCard();
 }
 
+// ----- WiFi -----
 void setupWiFi() {
   delay(10);
   Serial.println();
@@ -115,30 +160,21 @@ void setupWiFi() {
     Serial.println("\nWiFi Connected!");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
-
-    // Blink LED to indicate WiFi connected
     blinkLED(3, 200);
   } else {
     Serial.println("\nWiFi Connection Failed!");
   }
 }
 
+// ----- MQTT -----
 void reconnectMQTT() {
   while (!client.connected()) {
     Serial.print("Connecting to MQTT broker...");
 
     if (client.connect(mqtt_client_id)) {
       Serial.println("Connected!");
-
-      // Subscribe to question topic
-      client.subscribe(topic_question);
-
-      // Publish status
-      client.publish(topic_status, "online");
-
-      // Blink LED to indicate MQTT connected
+      client.publish(topic_status, "online", true); // retained
       blinkLED(2, 300);
-
     } else {
       Serial.print("Failed, rc=");
       Serial.print(client.state());
@@ -148,58 +184,59 @@ void reconnectMQTT() {
   }
 }
 
-void mqttCallback(char *topic, byte *payload, unsigned int length) {
-  // Convert payload to string
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
+void publishAnswer(const char *payload) {
+  Serial.print(">> publish ");
+  Serial.print(topic_answer);
+  Serial.print(" : ");
+  Serial.println(payload);
+  client.publish(topic_answer, payload);
+  blinkLED(1, 80);
+}
+
+// ----- Buttons -----
+void checkButtons() {
+  if (millis() - lastButtonTime < buttonDebounce) {
+    return;
   }
 
-  Serial.print("Message received on topic: ");
-  Serial.println(topic);
-  Serial.print("Message: ");
-  Serial.println(message);
-
-  // Parse question message (format: "QUESTION|correct_answer_id|question_text")
-  if (String(topic) == topic_question) {
-    int firstPipe = message.indexOf('|');
-    int secondPipe = message.indexOf('|', firstPipe + 1);
-
-    if (firstPipe > 0 && secondPipe > 0) {
-      correctAnswerId = message.substring(firstPipe + 1, secondPipe);
-      currentQuestion = message.substring(secondPipe + 1);
-
-      Serial.print("New Question Set - Correct Answer ID: ");
-      Serial.println(correctAnswerId);
-      Serial.print("Question: ");
-      Serial.println(currentQuestion);
-
-      // Blink LED to indicate new question
-      blinkLED(1, 100);
-    }
+  // Active-low: digitalRead == LOW means pressed
+  if (digitalRead(BTN_A_PIN) == LOW) {
+    publishAnswer("BTN_A");
+    lastButtonTime = millis();
+    return;
+  }
+  if (digitalRead(BTN_B_PIN) == LOW) {
+    publishAnswer("BTN_B");
+    lastButtonTime = millis();
+    return;
+  }
+  if (BTN_C_PIN >= 0 && digitalRead(BTN_C_PIN) == LOW) {
+    publishAnswer("BTN_C");
+    lastButtonTime = millis();
+    return;
+  }
+  if (BTN_D_PIN >= 0 && digitalRead(BTN_D_PIN) == LOW) {
+    publishAnswer("BTN_D");
+    lastButtonTime = millis();
+    return;
   }
 }
 
+// ----- RFID -----
 void checkRFIDCard() {
-  // Check if enough time has passed since last read
   if (millis() - lastCardReadTime < cardReadDelay) {
     return;
   }
 
-  // Look for new cards
   if (!mfrc522.PICC_IsNewCardPresent()) {
     return;
   }
-
-  // Select one of the cards
   if (!mfrc522.PICC_ReadCardSerial()) {
     return;
   }
 
-  // Card detected - turn on LED
-  digitalWrite(LED_PIN, LOW); // LED on
+  ledOn();
 
-  // Read card UID
   String cardId = "";
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] < 0x10) {
@@ -209,33 +246,14 @@ void checkRFIDCard() {
   }
   cardId.toUpperCase();
 
-  Serial.println("\n--- Card Detected ---");
-  Serial.print("Card ID: ");
+  Serial.print("\n--- Card Detected: ");
   Serial.println(cardId);
 
-  // Send answer to MQTT
-  String answerMessage = cardId;
-  client.publish(topic_answer, answerMessage.c_str());
+  publishAnswer(cardId.c_str());
 
-  Serial.println("Answer sent to dashboard!");
-  Serial.println("---------------------\n");
-
-  // Update last read time
   lastCardReadTime = millis();
-
-  // Halt PICC
   mfrc522.PICC_HaltA();
 
-  // Turn off LED after brief delay
-  delay(500);
-  digitalWrite(LED_PIN, HIGH); // LED off
-}
-
-void blinkLED(int times, int delayMs) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(LED_PIN, LOW); // LED on
-    delay(delayMs);
-    digitalWrite(LED_PIN, HIGH); // LED off
-    delay(delayMs);
-  }
+  delay(300);
+  ledOff();
 }

@@ -1,21 +1,20 @@
-// Teacher Control Panel JavaScript
+// Teacher Control Panel JavaScript - Session Manager
 
-// MQTT Configuration
 const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
 const MQTT_TOPICS = {
-    question: 'edubuddy/question',
-    answer: 'edubuddy/answer',
-    status: 'edubuddy/status',
-    control: 'edubuddy/control'
+    sessionStart: 'edubuddy/session/start',
+    sessionEnd:   'edubuddy/session/end',
+    resetBoard:   'edubuddy/control/reset_leaderboard',
+    status:       'edubuddy/status'
 };
 
 let mqttClient;
 let deviceOnline = false;
 
-// Initialize MQTT Connection
+// ----- MQTT setup -----
 function initializeMQTT() {
     console.log('Connecting to MQTT broker...');
-    
+
     mqttClient = mqtt.connect(MQTT_BROKER, {
         clientId: 'EduBuddy_Teacher_' + Math.random().toString(16).substr(2, 8),
         clean: true,
@@ -31,18 +30,17 @@ function initializeMQTT() {
 function onConnect() {
     console.log('Connected to MQTT broker!');
     updateMQTTStatus(true);
-    
-    // Subscribe to status messages
+
     mqttClient.subscribe(MQTT_TOPICS.status, (err) => {
         if (err) console.error('Subscribe error:', err);
     });
-    
+
     showAlert('Connected to system successfully!', 'success');
 }
 
 function onMessage(topic, message) {
     const msg = message.toString();
-    
+
     if (topic === MQTT_TOPICS.status) {
         deviceOnline = (msg === 'online');
         updateDeviceStatus(deviceOnline);
@@ -59,75 +57,66 @@ function onOffline() {
     updateMQTTStatus(false);
 }
 
-// Send question to students
-function sendQuestion() {
-    const answerId = document.getElementById('answer-id').value;
-    const questionText = document.getElementById('question-text').value;
-    
-    if (!answerId) {
-        showAlert('Please select the correct answer!', 'error');
+// ----- Session controls -----
+function startSession() {
+    const name = document.getElementById('student-name').value.trim();
+    const startCategory = document.getElementById('start-category').value;
+
+    if (!name) {
+        showAlert('Please enter the student\'s name first!', 'error');
+        document.getElementById('student-name').focus();
         return;
     }
-    
-    if (!questionText.trim()) {
-        showAlert('Please enter the question text!', 'error');
-        return;
-    }
-    
+
     if (!mqttClient || !mqttClient.connected) {
         showAlert('Not connected to MQTT broker!', 'error');
         return;
     }
-    
-    // Format: "QUESTION|correct_answer_id|question_text"
-    const message = `QUESTION|${answerId}|${questionText}`;
-    
-    mqttClient.publish(MQTT_TOPICS.question, message, (err) => {
+
+    const payload = JSON.stringify({ name: name, startCategory: startCategory });
+
+    mqttClient.publish(MQTT_TOPICS.sessionStart, payload, (err) => {
         if (err) {
-            showAlert('Failed to send question!', 'error');
+            showAlert('Failed to start session!', 'error');
             console.error('Publish error:', err);
         } else {
-            showAlert('Question sent successfully! 🎉', 'success');
-            console.log('Question sent:', message);
+            showAlert(`Session started for ${name} 🎉`, 'success');
+            console.log('Session start sent:', payload);
+            // Clear name field for the next student
+            document.getElementById('student-name').value = '';
         }
     });
 }
 
-// Load preset question
-function loadPreset(answerId, questionText) {
-    document.getElementById('answer-id').value = answerId;
-    document.getElementById('question-text').value = questionText;
-    
-    // Auto-send after loading preset
-    sendQuestion();
-}
+function endSession() {
+    if (!confirm('End the current student\'s session?')) return;
 
-// Clear current question
-function clearQuestion() {
-    if (confirm('Clear the current question?')) {
-        const message = 'QUESTION||Waiting for teacher...';
-        mqttClient.publish(MQTT_TOPICS.question, message);
-        
-        document.getElementById('answer-id').value = '';
-        document.getElementById('question-text').value = '';
-        
-        showAlert('Question cleared!', 'success');
+    if (!mqttClient || !mqttClient.connected) {
+        showAlert('Not connected to MQTT broker!', 'error');
+        return;
     }
+
+    mqttClient.publish(MQTT_TOPICS.sessionEnd, '1');
+    showAlert('Session ended.', 'success');
 }
 
-// Reset scores (send control message)
-function resetScores() {
-    if (confirm('Reset all scores? This will clear the dashboard.')) {
-        mqttClient.publish(MQTT_TOPICS.control, 'RESET_SCORES');
-        showAlert('Reset command sent!', 'success');
+function resetLeaderboard() {
+    if (!confirm('Reset the leaderboard? This will permanently delete ALL Top 3 scores.')) return;
+
+    if (!mqttClient || !mqttClient.connected) {
+        showAlert('Not connected to MQTT broker!', 'error');
+        return;
     }
+
+    mqttClient.publish(MQTT_TOPICS.resetBoard, '1');
+    showAlert('Leaderboard reset.', 'success');
 }
 
-// Update UI status indicators
+// ----- UI helpers -----
 function updateMQTTStatus(connected) {
     const dot = document.getElementById('mqtt-dot');
     const text = document.getElementById('mqtt-text');
-    
+
     if (connected) {
         dot.classList.add('online');
         text.textContent = 'Connected';
@@ -142,7 +131,7 @@ function updateMQTTStatus(connected) {
 function updateDeviceStatus(online) {
     const dot = document.getElementById('device-dot');
     const text = document.getElementById('device-text');
-    
+
     if (online) {
         dot.classList.add('online');
         text.textContent = 'Online';
@@ -157,17 +146,22 @@ function updateDeviceStatus(online) {
 function showAlert(message, type) {
     const alert = document.getElementById('alert');
     const alertText = document.getElementById('alert-text');
-    
+
     alert.className = 'alert show ' + type;
     alertText.textContent = message;
-    
+
     setTimeout(() => {
         alert.classList.remove('show');
-    }, 5000);
+    }, 4000);
 }
 
-// Initialize on page load
+// ----- Boot -----
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('Teacher Control Panel Starting...');
+    console.log('Teacher Control Panel starting...');
     initializeMQTT();
+
+    // Allow Enter key in name field to start session
+    document.getElementById('student-name').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') startSession();
+    });
 });
