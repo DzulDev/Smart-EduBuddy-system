@@ -6,388 +6,577 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart EduBuddy - Classroom Dashboard</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --brand:    #667eea;
+            --brand2:   #764ba2;
+            --pink:     #f5576c;
+            --green:    #28a745;
+            --gold:     #f7b731;
+            --radius:   28px;
+            --shadow:   0 20px 60px rgba(0,0,0,0.25);
         }
 
         body {
-            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+            font-family: 'Nunito', 'Arial Rounded MT Bold', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
-            color: #333;
+            color: #2d2d2d;
+        }
+
+        /* Decorative background blobs */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            opacity: 0.18;
+            pointer-events: none;
+        }
+        body::before {
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, #fff 0%, transparent 70%);
+            top: -200px; right: -100px;
+        }
+        body::after {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, #f5576c 0%, transparent 70%);
+            bottom: -100px; left: -80px;
         }
 
         .container {
-            width: 92%;
+            width: 94%;
             max-width: 1300px;
-            background: white;
-            border-radius: 30px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            background: #ffffff;
+            border-radius: var(--radius);
+            padding: 44px 50px;
+            box-shadow: var(--shadow);
             text-align: center;
-            min-height: 80vh;
+            min-height: 82vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            position: relative;
+            z-index: 1;
         }
 
-        h1 {
-            color: #667eea;
-            font-size: 2.5em;
-            margin-bottom: 15px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        /* ===== Screen system: only one .screen has .active at a time ===== */
+        /* ===== Screen system ===== */
         .screen { display: none; }
-        .screen.active { display: block; animation: fadeIn 0.4s ease-in; }
+        .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; animation: fadeIn 0.35s ease-out; }
 
         /* ===== IDLE SCREEN ===== */
+        #idle-screen .app-logo {
+            font-size: 1.15em;
+            font-weight: 900;
+            color: var(--brand);
+            letter-spacing: -0.5px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #idle-screen .app-logo span {
+            background: linear-gradient(135deg, var(--brand), var(--pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2.4em;
+        }
         #idle-screen .big-emoji {
-            font-size: 8em;
-            margin: 30px 0;
+            font-size: 7em;
+            margin: 20px 0 28px;
+            animation: float 3s ease-in-out infinite;
         }
         #idle-screen .idle-text {
-            font-size: 2.2em;
-            color: #555;
-            margin-bottom: 20px;
+            font-size: 2.4em;
+            font-weight: 800;
+            color: #444;
+            margin-bottom: 12px;
+            line-height: 1.25;
         }
         #idle-screen .idle-hint {
             font-size: 1.3em;
-            color: #888;
+            color: #999;
+            font-weight: 600;
+        }
+        #bank-indicator {
+            display: none;
+            margin-top: 18px;
+            font-size: 1em;
+            color: var(--brand);
+            background: #eef0ff;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-weight: 700;
         }
 
         /* ===== COUNTDOWN SCREEN ===== */
         #countdown-screen .student-greet {
-            font-size: 3em;
-            color: #667eea;
-            margin-bottom: 30px;
+            font-size: 2.8em;
+            font-weight: 800;
+            color: var(--brand);
+            margin-bottom: 20px;
         }
         #countdown-screen .countdown-num {
-            font-size: 16em;
-            font-weight: bold;
-            color: #f5576c;
-            text-shadow: 4px 4px 12px rgba(0,0,0,0.2);
+            font-size: 15em;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--pink), #ff8c00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             line-height: 1;
+            filter: drop-shadow(4px 4px 10px rgba(245,87,108,0.3));
             animation: pulse 1s ease-in-out infinite;
         }
         #countdown-screen .ready-text {
             font-size: 2em;
-            color: #555;
-            margin-top: 20px;
+            color: #666;
+            font-weight: 700;
+            margin-top: 16px;
         }
 
-        /* ===== QUESTION HEADER (shared) ===== */
+        /* ===== QUESTION HEADER ===== */
         .q-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding: 0 10px;
-            font-size: 1.3em;
+            width: 100%;
+            margin-bottom: 22px;
+            padding: 14px 20px;
+            background: #f8f9ff;
+            border-radius: 18px;
         }
         .q-header .category-badge {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, var(--brand), var(--brand2));
             color: white;
-            padding: 8px 18px;
-            border-radius: 20px;
-            font-weight: bold;
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.25em;
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 14px rgba(102,126,234,0.35);
         }
         .q-header .progress {
+            font-size: 1.5em;
+            font-weight: 800;
             color: #555;
-            font-weight: bold;
+            background: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
         }
         .q-header .student-tag {
-            color: #f5576c;
-            font-weight: bold;
+            color: var(--pink);
+            font-weight: 800;
+            font-size: 1.25em;
+            background: #fff0f3;
+            padding: 10px 20px;
+            border-radius: 30px;
         }
 
+        /* ===== QUESTION TEXT ===== */
         .question-text {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            background: linear-gradient(135deg, #f093fb 0%, var(--pink) 100%);
             color: white;
-            font-size: 2.8em;
-            font-weight: bold;
-            padding: 40px 30px;
-            border-radius: 25px;
-            margin: 20px 0 30px;
-            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            font-size: 2.9em;
+            font-weight: 800;
+            padding: 32px 36px;
+            border-radius: 24px;
+            margin: 0 0 24px;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.2);
             line-height: 1.3;
-            min-height: 180px;
+            min-height: 140px;
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(245,87,108,0.25);
         }
 
-        /* ===== MCQ OPTIONS (4 buttons A/B/C/D) ===== */
+        /* ===== QUESTION IMAGE ===== */
+        .question-image {
+            display: none;
+            max-width: 280px;
+            max-height: 200px;
+            border-radius: 20px;
+            object-fit: contain;
+            margin: 0 auto 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            border: 4px solid #f0f0f0;
+        }
+
+        /* ===== MCQ OPTIONS ===== */
         .mcq-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            max-width: 900px;
-            margin: 0 auto;
+            gap: 18px;
+            width: 100%;
+            max-width: 1000px;
         }
         .mcq-option {
             background: #f8f9fa;
-            border: 4px solid #dee2e6;
+            border: 3px solid #e8ecf0;
             border-radius: 20px;
-            padding: 30px 20px;
+            padding: 26px 24px;
             font-size: 2em;
-            font-weight: bold;
+            font-weight: 800;
             color: #333;
             display: flex;
             align-items: center;
-            gap: 20px;
-            justify-content: flex-start;
-            transition: all 0.2s;
+            gap: 22px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
+        .mcq-option:hover { border-color: var(--brand); box-shadow: 0 6px 18px rgba(102,126,234,0.15); }
         .mcq-option .letter {
-            background: #667eea;
+            background: linear-gradient(135deg, var(--brand), var(--brand2));
             color: white;
-            width: 65px;
-            height: 65px;
+            width: 70px;
+            height: 70px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.4em;
+            font-weight: 900;
             flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(102,126,234,0.4);
+            box-shadow: 0 6px 16px rgba(102,126,234,0.35);
         }
-        .mcq-option .text {
-            flex: 1;
-            text-align: left;
-        }
+        .mcq-option .text { flex: 1; text-align: left; }
 
-        /* ===== TF OPTIONS (2 cards) ===== */
+        /* ===== TF OPTIONS ===== */
         .tf-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            max-width: 800px;
-            margin: 0 auto;
+            gap: 28px;
+            width: 100%;
+            max-width: 860px;
         }
         .tf-card {
-            border-radius: 25px;
-            padding: 50px 30px;
-            font-size: 2.4em;
-            font-weight: bold;
+            border-radius: 28px;
+            padding: 52px 36px;
+            font-size: 2.5em;
+            font-weight: 900;
             color: white;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.18);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
+            gap: 16px;
         }
         .tf-card .card-label {
-            background: rgba(255,255,255,0.25);
-            padding: 8px 20px;
+            background: rgba(255,255,255,0.28);
+            padding: 9px 24px;
             border-radius: 30px;
-            font-size: 0.6em;
+            font-size: 0.55em;
+            font-weight: 800;
+            letter-spacing: 0.5px;
         }
-        .tf-card.card-a { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .tf-card.card-b { background: linear-gradient(135deg, #f5576c 0%, #c0392b 100%); }
-
+        .tf-card.card-a { background: linear-gradient(135deg, #4facfe 0%, #00d2ff 100%); box-shadow: 0 12px 32px rgba(79,172,254,0.35); }
+        .tf-card.card-b { background: linear-gradient(135deg, var(--pink) 0%, #c0392b 100%); box-shadow: 0 12px 32px rgba(245,87,108,0.35); }
         .tf-hint {
             font-size: 1.4em;
-            color: #666;
-            margin-top: 25px;
+            font-weight: 700;
+            color: #888;
+            margin-top: 22px;
+        }
+
+        /* ===== CARD HUNT SCREEN ===== */
+        .card-hunt-prompt {
+            margin-top: 32px;
+            font-size: 2.3em;
+            font-weight: 800;
+            color: var(--brand);
+            padding: 28px 36px;
+            background: linear-gradient(135deg, #f0f3ff, #e8edff);
+            border-radius: 22px;
+            border: 3px dashed var(--brand);
+            animation: pulse 2.2s ease-in-out infinite;
+            box-shadow: 0 6px 20px rgba(102,126,234,0.12);
         }
 
         /* ===== FEEDBACK OVERLAY ===== */
         .feedback-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
             display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
         }
-        .feedback-overlay.show { display: flex; animation: fadeIn 0.2s ease-in; }
-        .feedback-overlay.correct { background: rgba(40, 167, 69, 0.95); }
-        .feedback-overlay.wrong { background: rgba(220, 53, 69, 0.95); }
-        .feedback-content { text-align: center; color: white; }
+        .feedback-overlay.show    { display: flex; animation: fadeIn 0.15s ease-in; }
+        .feedback-overlay.correct {
+            background: linear-gradient(135deg, rgba(34,197,94,0.96), rgba(22,163,74,0.96));
+        }
+        .feedback-overlay.wrong {
+            background: linear-gradient(135deg, rgba(239,68,68,0.96), rgba(185,28,28,0.96));
+        }
+        .feedback-content { text-align: center; color: white; position: relative; z-index: 2; }
+        .feedback-mascot {
+            font-size: 10em;
+            line-height: 1;
+            animation: mascotPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: block;
+            margin-bottom: 10px;
+        }
+        .feedback-overlay.wrong .feedback-mascot {
+            animation: mascotShake 0.5s ease-in-out;
+        }
         .feedback-icon {
-            font-size: 13em;
-            margin-bottom: 20px;
-            animation: scaleIn 0.4s ease-out;
+            font-size: 5em;
+            margin-bottom: 10px;
+            animation: scaleIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .feedback-text {
-            font-size: 4.5em;
-            font-weight: bold;
-            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.3);
-            animation: slideUp 0.4s ease-out;
+            font-size: 4em;
+            font-weight: 900;
+            text-shadow: 3px 3px 12px rgba(0,0,0,0.25);
+            animation: slideUp 0.35s ease-out;
+            letter-spacing: -1px;
         }
 
         /* ===== CATEGORY SCOREBOARD ===== */
+        #category-scoreboard {
+            gap: 6px;
+        }
         #category-scoreboard .cat-title {
-            font-size: 3em;
-            color: #667eea;
-            margin-bottom: 20px;
+            font-size: 2.8em;
+            font-weight: 900;
+            color: var(--brand);
+            margin-bottom: 6px;
         }
         #category-scoreboard .cat-score {
-            font-size: 6em;
-            font-weight: bold;
-            color: #f5576c;
-            text-shadow: 3px 3px 8px rgba(0,0,0,0.15);
-            margin: 10px 0;
-        }
-        #category-scoreboard .cat-next {
-            font-size: 1.7em;
-            color: #555;
-            margin: 25px 0;
-        }
-        #category-scoreboard .top3 {
-            background: #f8f9fa;
-            border-radius: 20px;
-            padding: 25px;
-            max-width: 600px;
-            margin: 25px auto 0;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        #category-scoreboard .top3 h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-            font-size: 1.5em;
-        }
-        .top3-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 25px;
-            background: white;
-            border-radius: 12px;
-            margin-bottom: 8px;
-            font-size: 1.4em;
-            font-weight: bold;
-        }
-        .top3-row .rank { color: #f5576c; }
-        .top3-row .name { flex: 1; text-align: left; padding-left: 20px; color: #333; }
-        .top3-row .score { color: #667eea; }
-        .top3-row.empty { color: #aaa; font-style: italic; font-weight: normal; justify-content: center; }
-        .top3-row.gold   { background: linear-gradient(135deg, #ffd700 30%, #fff8b8); }
-        .top3-row.silver { background: linear-gradient(135deg, #c0c0c0 30%, #ececec); }
-        .top3-row.bronze { background: linear-gradient(135deg, #cd7f32 30%, #f5d6b3); }
-        .top3-row.others { background: #f1f3f5; color: #555; font-weight: normal; font-size: 1.2em; }
-
-        /* ===== FINAL SCOREBOARD ===== */
-        #final-scoreboard .final-title {
-            font-size: 3em;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-        #final-scoreboard .final-name {
-            font-size: 2em;
-            color: #555;
-            margin-bottom: 20px;
-        }
-        #final-scoreboard .final-score {
-            font-size: 7em;
-            font-weight: bold;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            font-size: 6.5em;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--pink), #ff8c00);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            text-shadow: none;
-            line-height: 1;
-            margin: 10px 0;
+            filter: drop-shadow(2px 2px 6px rgba(245,87,108,0.2));
+            line-height: 1.1;
         }
-        #final-scoreboard .final-out-of {
-            font-size: 1.4em;
-            color: #888;
-            margin-bottom: 25px;
+        #category-scoreboard .cat-next {
+            font-size: 1.45em;
+            font-weight: 700;
+            color: #777;
+            margin: 12px 0 16px;
         }
-        #final-scoreboard .top3 {
-            background: #fff8e7;
-            border: 3px solid #ffd700;
+        #category-scoreboard .top3 {
+            background: #f8f9ff;
             border-radius: 20px;
-            padding: 25px;
-            max-width: 600px;
-            margin: 0 auto;
-            max-height: 320px;
+            padding: 24px 28px;
+            width: 100%;
+            max-width: 640px;
+            max-height: 280px;
             overflow-y: auto;
         }
+        #category-scoreboard .top3 h3 {
+            color: var(--brand);
+            margin-bottom: 14px;
+            font-size: 1.45em;
+            font-weight: 800;
+        }
+
+        /* ===== TOP 3 ROWS ===== */
+        .top3-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 22px;
+            background: white;
+            border-radius: 14px;
+            margin-bottom: 8px;
+            font-size: 1.35em;
+            font-weight: 800;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .top3-row .rank  { color: var(--pink); min-width: 28px; }
+        .top3-row .name  { flex: 1; text-align: left; padding-left: 18px; color: #333; }
+        .top3-row .score { color: var(--brand); }
+        .top3-row.empty  { color: #bbb; font-style: italic; font-weight: 600; justify-content: center; background: #fafafa; }
+        .top3-row.gold   { background: linear-gradient(135deg, #ffe88a, #fff4c2); border-left: 5px solid #f7b731; }
+        .top3-row.silver { background: linear-gradient(135deg, #dde0e5, #f0f2f5); border-left: 5px solid #adb5bd; }
+        .top3-row.bronze { background: linear-gradient(135deg, #f0c98a, #fae5c0); border-left: 5px solid #cd7f32; }
+        .top3-row.others { background: #f4f6fa; color: #666; font-weight: 700; font-size: 1.15em; box-shadow: none; }
+
+        /* ===== FINAL SCOREBOARD ===== */
+        #final-scoreboard {
+            gap: 6px;
+        }
+        #final-scoreboard .final-title {
+            font-size: 3em;
+            font-weight: 900;
+            color: var(--brand);
+            margin-bottom: 4px;
+        }
+        #final-scoreboard .final-name  {
+            font-size: 2em;
+            font-weight: 700;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        #final-scoreboard .final-score {
+            font-size: 7.5em;
+            font-weight: 900;
+            background: linear-gradient(135deg, #f093fb 0%, var(--pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(2px 2px 8px rgba(245,87,108,0.2));
+            line-height: 1;
+        }
+        #final-scoreboard .final-out-of {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #aaa;
+            margin-bottom: 22px;
+        }
+        #final-scoreboard .top3 {
+            background: linear-gradient(135deg, #fffdf0, #fffae6);
+            border: 3px solid #f7d060;
+            border-radius: 22px;
+            padding: 24px 28px;
+            width: 100%;
+            max-width: 640px;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(247,183,49,0.15);
+        }
         #final-scoreboard .top3 h3 {
-            color: #c08800;
-            margin-bottom: 15px;
-            font-size: 1.7em;
+            color: #b8860b;
+            margin-bottom: 14px;
+            font-size: 1.65em;
+            font-weight: 900;
         }
         #final-scoreboard .wait-teacher {
-            margin-top: 25px;
+            margin-top: 22px;
             font-size: 1.2em;
-            color: #888;
+            font-weight: 600;
+            color: #bbb;
             font-style: italic;
         }
 
-        /* ===== SIMULATOR HINT BAR ===== */
+        /* ===== SIMULATOR HINT ===== */
         #sim-hint {
             position: fixed;
-            bottom: 45px;
+            bottom: 48px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(102, 126, 234, 0.92);
+            background: rgba(102,126,234,0.92);
             color: white;
-            padding: 6px 20px;
-            border-radius: 20px;
+            padding: 7px 22px;
+            border-radius: 30px;
             font-size: 0.85em;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-family: 'Nunito', Arial, sans-serif;
+            font-weight: 700;
+            box-shadow: 0 4px 14px rgba(102,126,234,0.3);
             white-space: nowrap;
             display: none;
             z-index: 999;
+            backdrop-filter: blur(4px);
         }
 
-        /* ===== STATUS BAR (always visible at bottom) ===== */
+        /* ===== STATUS BAR ===== */
         .status-bar {
             position: fixed;
-            bottom: 10px;
+            bottom: 12px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(255,255,255,0.9);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            color: #555;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            background: rgba(255,255,255,0.92);
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #666;
+            font-family: 'Nunito', Arial, sans-serif;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .status-bar .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         .status-bar .dot {
             display: inline-block;
-            width: 8px;
-            height: 8px;
+            width: 9px; height: 9px;
             border-radius: 50%;
             background: #dc3545;
-            margin: 0 4px;
-            vertical-align: middle;
         }
-        .status-bar .dot.online { background: #28a745; }
+        .status-bar .dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
 
         /* ===== Animations ===== */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+        @keyframes fadeIn   { from { opacity: 0; }          to { opacity: 1; } }
+        @keyframes scaleIn  { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes slideUp  { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes mascotPop {
+            0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+            60%  { transform: scale(1.25) rotate(8deg); opacity: 1; }
+            80%  { transform: scale(0.92) rotate(-4deg); }
+            100% { transform: scale(1) rotate(0deg); }
         }
-        @keyframes scaleIn {
-            from { transform: scale(0); }
-            to { transform: scale(1); }
+        @keyframes mascotShake {
+            0%,100% { transform: translateX(0) rotate(0deg); }
+            15%     { transform: translateX(-18px) rotate(-8deg); }
+            30%     { transform: translateX(16px) rotate(7deg); }
+            45%     { transform: translateX(-12px) rotate(-5deg); }
+            60%     { transform: translateX(10px) rotate(4deg); }
+            75%     { transform: translateX(-6px) rotate(-2deg); }
         }
-        @keyframes slideUp {
-            from { transform: translateY(50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+        @keyframes starBurst {
+            0%   { transform: translate(-50%,-50%) scale(0) rotate(0deg); opacity: 1; }
+            100% { transform: translate(-50%,-50%) scale(3.5) rotate(45deg); opacity: 0; }
         }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        @keyframes starFloat {
+            0%   { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-220px) scale(0.3); opacity: 0; }
         }
+
+        /* Stars that fly up on correct answer */
+        .star-particle {
+            position: absolute;
+            font-size: 2.5em;
+            pointer-events: none;
+            animation: starFloat 1s ease-out forwards;
+            z-index: 1;
+        }
+
+        /* Confetti for final scoreboard */
+        @keyframes confettiFall {
+            0%   { transform: translateY(-40px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(110vh) rotate(720deg); opacity: 0.6; }
+        }
+        .confetti-piece {
+            position: fixed;
+            width: 12px; height: 16px;
+            border-radius: 3px;
+            pointer-events: none;
+            z-index: 999;
+            animation: confettiFall linear forwards;
+        }
+        .feedback-overlay.correct::before {
+            content: '✨';
+            position: absolute;
+            top: 50%; left: 50%;
+            font-size: 8em;
+            animation: starBurst 0.6s ease-out forwards;
+            pointer-events: none;
+        }
+        @keyframes pulse   { 0%, 100% { transform: scale(1); }  50% { transform: scale(1.07); } }
+        @keyframes float   { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
     </style>
 </head>
 
@@ -396,27 +585,33 @@
 
         <!-- ============ IDLE SCREEN ============ -->
         <section class="screen active" id="idle-screen">
-            <h1>🎓 Smart EduBuddy 🎓</h1>
-            <div class="big-emoji">📚✨</div>
+            <div class="app-logo">
+                <span>Smart EduBuddy</span>
+            </div>
+            <div class="big-emoji">📚</div>
             <div class="idle-text">Waiting for teacher to start a session...</div>
-            <div class="idle-hint">Teacher: enter a student name and press Start</div>
+            <div class="idle-hint">Teacher: choose mode and press Start in the Control Panel</div>
+            <div id="bank-indicator"></div>
         </section>
 
         <!-- ============ COUNTDOWN SCREEN ============ -->
         <section class="screen" id="countdown-screen">
-            <div class="student-greet">Get Ready, <span id="countdown-name">Student</span>! 🎉</div>
+            <div class="student-greet" id="countdown-name-wrap">
+                Get Ready, <span id="countdown-name">Student</span>! 🎉
+            </div>
             <div class="countdown-num" id="countdown-num">3</div>
-            <div class="ready-text">First category: <strong id="countdown-category">Color</strong></div>
+            <div class="ready-text">Category: <strong id="countdown-category">Color 🎨</strong></div>
         </section>
 
         <!-- ============ MCQ QUESTION SCREEN ============ -->
         <section class="screen" id="mcq-screen">
             <div class="q-header">
                 <span class="category-badge" id="mcq-category">Color</span>
-                <span class="progress" id="mcq-progress">Question 1 / 5</span>
+                <span class="progress" id="mcq-progress">Q 1 / 5</span>
                 <span class="student-tag" id="mcq-student">Ali</span>
             </div>
             <div class="question-text" id="mcq-question">Question text here</div>
+            <img class="question-image" id="mcq-image" src="" alt="Question image">
             <div class="mcq-grid">
                 <div class="mcq-option"><div class="letter">A</div><div class="text" id="mcq-opt-a">Option A</div></div>
                 <div class="mcq-option"><div class="letter">B</div><div class="text" id="mcq-opt-b">Option B</div></div>
@@ -429,10 +624,11 @@
         <section class="screen" id="tf-screen">
             <div class="q-header">
                 <span class="category-badge" id="tf-category">Color</span>
-                <span class="progress" id="tf-progress">Question 4 / 5</span>
+                <span class="progress" id="tf-progress">Q 4 / 5</span>
                 <span class="student-tag" id="tf-student">Ali</span>
             </div>
             <div class="question-text" id="tf-question">Statement here</div>
+            <img class="question-image" id="tf-image" src="" alt="Question image">
             <div class="tf-grid">
                 <div class="tf-card card-a">
                     <div class="card-label">CARD A 🟦</div>
@@ -446,44 +642,72 @@
             <div class="tf-hint">Tap the card with your answer!</div>
         </section>
 
+        <!-- ============ CARD HUNT SCREEN ============ -->
+        <section class="screen" id="card-screen">
+            <div class="q-header">
+                <span class="category-badge" id="card-category">Category</span>
+                <span class="progress" id="card-progress">Q 1 / 5</span>
+                <span class="student-tag" id="card-student"></span>
+            </div>
+            <div class="question-text" id="card-question">Question here</div>
+            <img class="question-image" id="card-image" src="" alt="Question image">
+            <div class="card-hunt-prompt">
+                🃏 Find the correct card and tap it on the reader!
+            </div>
+        </section>
+
         <!-- ============ CATEGORY SCOREBOARD ============ -->
         <section class="screen" id="category-scoreboard">
             <div class="cat-title" id="cat-title">Color Done!</div>
             <div class="cat-score" id="cat-score">4 / 5</div>
-            <div class="cat-next" id="cat-next">Next up: Alphabet 🔤</div>
-            <div class="top3">
-                <h3>🏆 Top 3 — <span id="cat-top-name">Color</span></h3>
-                <div id="cat-top-list"></div>
+            <div class="cat-next" id="cat-next">Next up: Alphabet 🔤 — Teacher: tap Next Category</div>
+
+            <!-- Only shown in Test mode -->
+            <div id="cat-top3-section">
+                <div class="top3">
+                    <h3>🏆 Top 3 — <span id="cat-top-name">Color</span></h3>
+                    <div id="cat-top-list"></div>
+                </div>
             </div>
         </section>
 
         <!-- ============ FINAL SCOREBOARD ============ -->
         <section class="screen" id="final-scoreboard">
             <div class="final-title">🎉 All Done! 🎉</div>
-            <div class="final-name" id="final-name">Ali's final score</div>
+            <div class="final-name" id="final-name">Ali's Final Score</div>
             <div class="final-score" id="final-score">18</div>
             <div class="final-out-of">out of 20</div>
-            <div class="top3">
-                <h3>🏆 Overall Top 3</h3>
-                <div id="final-top-list"></div>
+
+            <!-- Only shown in Test mode -->
+            <div id="final-top3-section">
+                <div class="top3">
+                    <h3>🏆 Overall Top 3</h3>
+                    <div id="final-top-list"></div>
+                </div>
             </div>
+
             <div class="wait-teacher">Waiting for teacher to start the next student...</div>
         </section>
 
     </div>
 
-    <!-- Simulator keyboard hint (shows during questions) -->
+    <!-- Simulator keyboard hint -->
     <div id="sim-hint"></div>
 
-    <!-- Status bar (always visible) -->
+    <!-- Status bar -->
     <div class="status-bar">
-        MQTT <span class="dot" id="mqtt-dot"></span>
-        Device <span class="dot" id="device-dot"></span>
+        <div class="status-item">
+            MQTT <span class="dot" id="mqtt-dot"></span>
+        </div>
+        <div class="status-item">
+            Device <span class="dot" id="device-dot"></span>
+        </div>
     </div>
 
     <!-- Feedback Overlay -->
     <div class="feedback-overlay" id="feedback-overlay">
         <div class="feedback-content">
+            <div class="feedback-mascot" id="feedback-mascot">😄</div>
             <div class="feedback-icon" id="feedback-icon">✓</div>
             <div class="feedback-text" id="feedback-text">Correct!</div>
         </div>

@@ -1,6 +1,7 @@
 // Smart EduBuddy Dashboard - Session-based quiz engine
-// Loads questions.json, runs a state machine through 4 categories x 5 questions,
-// scores answers, and stores a per-category + overall leaderboard in localStorage.
+// Supports Learning Mode (no name/leaderboard, manual category advance) and
+// Test Mode (name + leaderboard + manual category advance).
+// Question bank loaded from localStorage (custom) or questions.json (default).
 
 // =====================================================================
 // CONFIGURATION
@@ -13,39 +14,48 @@ const MQTT_TOPICS = {
     status:       'edubuddy/status',
     sessionStart: 'edubuddy/session/start',
     sessionEnd:   'edubuddy/session/end',
-    resetBoard:   'edubuddy/control/reset_leaderboard'
+    resetBoard:   'edubuddy/control/reset_leaderboard',
+    nextCat:      'edubuddy/control/next_category'
 };
 
-// Fixed category rotation order. Teacher picks the starting one;
-// the rest follow in this order, wrapping around.
-const CATEGORY_ORDER = ['color', 'alphabet', 'shape', 'number'];
-
-const CATEGORY_DISPLAY = {
+// Default display info for built-in categories
+const DEFAULT_CAT_DISPLAY = {
     color:    { label: 'Color',    emoji: '🎨' },
     alphabet: { label: 'Alphabet', emoji: '🔤' },
     shape:    { label: 'Shape',    emoji: '🔺' },
     number:   { label: 'Number',   emoji: '🔢' }
 };
 
+function getCategoryDisplay(cat) {
+    if (DEFAULT_CAT_DISPLAY[cat]) return DEFAULT_CAT_DISPLAY[cat];
+    return { label: cat.charAt(0).toUpperCase() + cat.slice(1), emoji: '📚' };
+}
+
+function getCategoryOrder() {
+    if (!questionBank) return [];
+    return Object.keys(questionBank).filter(k => !k.startsWith('_'));
+}
+
 // --- TWO-CARD MAPPING (TF questions) ---------------------------------
-// The student uses 2 RFID cards for True/False questions. The MEANING
-// of each card (which is "correct") is set per question in questions.json.
-// You only need to do this once: scan each card with the firmware and
-// copy the printed UID into one of the slots below. UIDs are uppercase
-// hex with no spaces, exactly as the firmware prints them.
-//
-// Example:
-//   'DEADBEEF': 'A',
-//   'CAFE1234': 'B',
 const TF_CARD_MAP = {
-    // Replace these placeholders with the real UIDs of your 2 cards.
+    // TF cards (2) — for True/False questions
     'CARD_A_UID_HERE': 'A',
     'CARD_B_UID_HERE': 'B',
-    // Simulator mode: virtual UIDs triggered by keyboard keys 1 / 2
+    // Hunt cards (up to 5) — for Card Hunt questions
+    'HUNT_CARD_1_UID': 'CARD1',
+    'HUNT_CARD_2_UID': 'CARD2',
+    'HUNT_CARD_3_UID': 'CARD3',
+    'HUNT_CARD_4_UID': 'CARD4',
+    'HUNT_CARD_5_UID': 'CARD5',
+    // Simulator: keyboard keys 1–5 for hunt cards, Q/W for TF cards
     'SIM_CARD_A': 'A',
-    'SIM_CARD_B': 'B'
+    'SIM_CARD_B': 'B',
+    'SIM_CARD_1': 'CARD1',
+    'SIM_CARD_2': 'CARD2',
+    'SIM_CARD_3': 'CARD3',
+    'SIM_CARD_4': 'CARD4',
+    'SIM_CARD_5': 'CARD5'
 };
-// ---------------------------------------------------------------------
 
 const JSONBIN_ID  = '69e457a9aaba88219714735f';
 const JSONBIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
@@ -54,13 +64,15 @@ const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 const TOP_N = 3;
 
 const TIMING = {
-    countdownStep:    1000,  // ms between countdown numbers
-    feedbackDuration: 1500,  // how long the ✓/✗ overlay stays
-    catScoreboard:    4500,  // how long the per-category scoreboard stays
-    betweenCategories: 500   // brief pause before next countdown
+    countdownStep:    1000,
+    feedbackDuration: 1500,
+    betweenCategories: 500
 };
 
-// --- SOUND EFFECTS (Web Audio API — no files needed) -----------------
+// =====================================================================
+// SOUND EFFECTS (Web Audio API)
+// =====================================================================
+
 let _audioCtx = null;
 function getAudioCtx() {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -71,25 +83,23 @@ function playSound(name) {
     try {
         const ctx = getAudioCtx();
         if (ctx.state === 'suspended') ctx.resume();
-        if (name === 'correct') _playCorrect(ctx);
-        else if (name === 'wrong') _playWrong(ctx);
-        else if (name === 'tick') _playCountdownTick(ctx);
-        else if (name === 'go') _playCountdownGo(ctx);
-        else if (name === 'leaderboard') { _playPodiumFanfare(ctx); }
-        else if (name === 'finalboard')  { _playDrumrollFanfare(ctx); }
-    } catch (_) { /* audio not supported */ }
+        if (name === 'correct')      _playCorrect(ctx);
+        else if (name === 'wrong')   _playWrong(ctx);
+        else if (name === 'tick')    _playCountdownTick(ctx);
+        else if (name === 'go')      _playCountdownGo(ctx);
+        else if (name === 'leaderboard') _playPodiumFanfare(ctx);
+        else if (name === 'finalboard')  _playDrumrollFanfare(ctx);
+    } catch (_) {}
 }
 
 function _playCorrect(ctx) {
-    // Triumphant 4-note ascending fanfare (sine + triangle for richness)
     const notes = [523.25, 659.25, 783.99, 1046.50];
     const t = ctx.currentTime;
     notes.forEach((freq, i) => {
         const osc1 = ctx.createOscillator();
         const osc2 = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc1.connect(gain); osc2.connect(gain);
-        gain.connect(ctx.destination);
+        osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination);
         osc1.type = 'sine'; osc1.frequency.value = freq;
         osc2.type = 'triangle'; osc2.frequency.value = freq * 2;
         const s = t + i * 0.13;
@@ -102,12 +112,10 @@ function _playCorrect(ctx) {
 }
 
 function _playCountdownTick(ctx) {
-    // Short punchy beep — like a game show countdown clock
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.value = 880;
+    osc.type = 'sine'; osc.frequency.value = 880;
     const t = ctx.currentTime;
     gain.gain.setValueAtTime(0.5, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
@@ -115,15 +123,13 @@ function _playCountdownTick(ctx) {
 }
 
 function _playCountdownGo(ctx) {
-    // Arcade power-up: rapid ascending square-wave notes (classic 8-bit feel)
     const notes = [262, 330, 392, 523, 659, 784, 1047, 1319];
     const t = ctx.currentTime;
     notes.forEach((freq, i) => {
         const osc  = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = 'square';
-        osc.frequency.value = freq;
+        osc.type = 'square'; osc.frequency.value = freq;
         const s = t + i * 0.065;
         gain.gain.setValueAtTime(0.28, s);
         gain.gain.exponentialRampToValueAtTime(0.001, s + 0.12);
@@ -133,82 +139,88 @@ function _playCountdownGo(ctx) {
 
 function _playDrumrollFanfare(ctx) {
     const t = ctx.currentTime;
-    const rollDuration = 1.3;
 
-    // Accelerating snare hits (individual noise bursts, spacing shrinks each hit)
+    // === PHASE 1: Long building drumroll (2.2s) ===
+    const rollDuration = 2.2;
     let hitTime = t;
-    let interval = 0.12;
+    let interval = 0.14;
     while (hitTime < t + rollDuration) {
-        const hitBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.06), ctx.sampleRate);
+        const hitBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.07), ctx.sampleRate);
         const d = hitBuf.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-
         const src = ctx.createBufferSource();
         src.buffer = hitBuf;
         const bp = ctx.createBiquadFilter();
-        bp.type = 'bandpass'; bp.frequency.value = 300; bp.Q.value = 1;
+        bp.type = 'bandpass'; bp.frequency.value = 280; bp.Q.value = 0.8;
         const g = ctx.createGain();
         const progress = (hitTime - t) / rollDuration;
-        g.gain.setValueAtTime(0.15 + progress * 0.4, hitTime);
-        g.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.055);
+        g.gain.setValueAtTime(0.1 + progress * 0.55, hitTime);
+        g.gain.exponentialRampToValueAtTime(0.001, hitTime + 0.065);
         src.connect(bp); bp.connect(g); g.connect(ctx.destination);
-        src.start(hitTime); src.stop(hitTime + 0.06);
-
-        interval = Math.max(0.035, interval * 0.88);
+        src.start(hitTime); src.stop(hitTime + 0.07);
+        interval = Math.max(0.022, interval * 0.91);
         hitTime += interval;
     }
 
-    // Grand fanfare after roll — bigger chord than category fanfare (extra bass)
-    const f = t + rollDuration + 0.06;
-    [330, 392, 523].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
+    // === PHASE 2: Crowd cheer burst (starts at roll end) ===
+    const cheerStart = t + rollDuration;
+    const cheerBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2.5), ctx.sampleRate);
+    const cd = cheerBuf.getChannelData(0);
+    for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
+    const cheerSrc = ctx.createBufferSource();
+    cheerSrc.buffer = cheerBuf;
+    const cheerBp = ctx.createBiquadFilter();
+    cheerBp.type = 'bandpass'; cheerBp.frequency.value = 1200; cheerBp.Q.value = 0.6;
+    const cheerGain = ctx.createGain();
+    cheerSrc.connect(cheerBp); cheerBp.connect(cheerGain); cheerGain.connect(ctx.destination);
+    cheerGain.gain.setValueAtTime(0, cheerStart);
+    cheerGain.gain.linearRampToValueAtTime(0.5, cheerStart + 0.2);
+    cheerGain.gain.linearRampToValueAtTime(0.4, cheerStart + 1.2);
+    cheerGain.gain.exponentialRampToValueAtTime(0.001, cheerStart + 2.4);
+    cheerSrc.start(cheerStart); cheerSrc.stop(cheerStart + 2.5);
+
+    // === PHASE 3: Ascending brass run ===
+    const f = cheerStart + 0.05;
+    [261, 330, 392, 494, 523, 659].forEach((freq, i) => {
+        const osc  = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
         osc.type = 'sawtooth'; osc.frequency.value = freq;
-        const s = f + i * 0.1;
-        gain.gain.setValueAtTime(0.22, s);
-        gain.gain.exponentialRampToValueAtTime(0.001, s + 0.14);
-        osc.start(s); osc.stop(s + 0.15);
+        const s = f + i * 0.09;
+        gain.gain.setValueAtTime(0.28, s);
+        gain.gain.exponentialRampToValueAtTime(0.001, s + 0.13);
+        osc.start(s); osc.stop(s + 0.14);
     });
-    [261, 523, 659, 784, 1047].forEach(freq => {
-        const osc = ctx.createOscillator();
+
+    // === PHASE 4: Grand final chord (big and sustained) ===
+    const chord = f + 0.6;
+    [130, 196, 261, 330, 392, 523, 659, 784, 1047].forEach((freq, i) => {
+        const osc  = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = 'sawtooth'; osc.frequency.value = freq;
-        const s = f + 0.33;
-        gain.gain.setValueAtTime(0.15, s);
-        gain.gain.exponentialRampToValueAtTime(0.001, s + 1.1);
-        osc.start(s); osc.stop(s + 1.15);
+        osc.type = i % 2 === 0 ? 'sawtooth' : 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.18, chord);
+        gain.gain.linearRampToValueAtTime(0.22, chord + 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, chord + 2.2);
+        osc.start(chord); osc.stop(chord + 2.25);
     });
-}
 
-function _playCrowdCheer(ctx) {
-    // Synthesized crowd cheer — filtered white noise with rising then falling envelope
-    const t = ctx.currentTime;
-    const bufSize = Math.floor(ctx.sampleRate * 1.8);
-    const buffer  = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-    const data    = buffer.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 1100;
-    bp.Q.value = 0.7;
-
-    const gain = ctx.createGain();
-    source.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.45, t + 0.35);
-    gain.gain.linearRampToValueAtTime(0.38, t + 1.0);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
-    source.start(t); source.stop(t + 1.8);
+    // === PHASE 5: Sparkle tones on top ===
+    const sparkle = chord + 0.1;
+    [1047, 1319, 1568, 2093].forEach((freq, i) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine'; osc.frequency.value = freq;
+        const s = sparkle + i * 0.12;
+        gain.gain.setValueAtTime(0.12, s);
+        gain.gain.exponentialRampToValueAtTime(0.001, s + 0.5);
+        osc.start(s); osc.stop(s + 0.55);
+    });
 }
 
 function _playPodiumFanfare(ctx) {
-    // Short ascending run then triumphant brass chord
     const t = ctx.currentTime;
     [392, 523, 659].forEach((freq, i) => {
         const osc  = ctx.createOscillator();
@@ -220,7 +232,6 @@ function _playPodiumFanfare(ctx) {
         gain.gain.exponentialRampToValueAtTime(0.001, s + 0.13);
         osc.start(s); osc.stop(s + 0.14);
     });
-    // Big final chord: C5 E5 G5 C6
     [523, 659, 784, 1047].forEach(freq => {
         const osc  = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -234,7 +245,6 @@ function _playPodiumFanfare(ctx) {
 }
 
 function _playWrong(ctx) {
-    // Dramatic 3-pulse descending sawtooth buzzer (Price-is-Right losing horn)
     const t = ctx.currentTime;
     [300, 220, 160].forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -250,8 +260,6 @@ function _playWrong(ctx) {
     });
 }
 
-// Browsers block audio until the page has seen a user gesture.
-// Resume the AudioContext on first interaction.
 function unlockAudioOnce() {
     try { getAudioCtx().resume(); } catch (_) {}
     window.removeEventListener('click',      unlockAudioOnce);
@@ -262,21 +270,23 @@ window.addEventListener('click',      unlockAudioOnce);
 window.addEventListener('keydown',    unlockAudioOnce);
 window.addEventListener('touchstart', unlockAudioOnce);
 
-// --- KEYBOARD SIMULATOR (no hardware needed for testing) -------------
-// MCQ:  Press A / B / C / D  → simulates button press
-// TF:   Press 1              → simulates Card A tap
-//       Press 2              → simulates Card B tap
+// --- KEYBOARD SIMULATOR --------------------------------------------------
+// MCQ:       A/B/C/D  → button press
+// TF:        Q = Card A,  W = Card B
+// Card Hunt: 1–5      → Hunt Card 1–5
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     const key = e.key.toUpperCase();
     if (state === STATES.QUESTION_MCQ && ['A','B','C','D'].includes(key)) {
         handleAnswerInput('BTN_' + key);
     } else if (state === STATES.QUESTION_TF) {
-        if (key === '1') handleAnswerInput('SIM_CARD_A');
-        if (key === '2') handleAnswerInput('SIM_CARD_B');
+        if (key === 'Q') handleAnswerInput('SIM_CARD_A');
+        if (key === 'W') handleAnswerInput('SIM_CARD_B');
+    } else if (state === STATES.QUESTION_CARD) {
+        const num = parseInt(key);
+        if (num >= 1 && num <= 5) handleAnswerInput('SIM_CARD_' + num);
     }
 });
-// ---------------------------------------------------------------------
 
 // =====================================================================
 // STATE
@@ -287,25 +297,15 @@ const STATES = {
     COUNTDOWN:      'countdown',
     QUESTION_MCQ:   'mcq',
     QUESTION_TF:    'tf',
+    QUESTION_CARD:  'card',
     FEEDBACK:       'feedback',
     CATEGORY_DONE:  'category_done',
     FINAL_DONE:     'final_done'
 };
 
 let state = STATES.IDLE;
-let questionBank = null; // loaded from questions.json
-
+let questionBank = null;
 let session = null;
-// session = {
-//   name: "Ali",
-//   categories: ["color","alphabet","shape","number"],  // rotated order
-//   catIdx: 0,
-//   questions: [shuffled questions for current category],
-//   qIdx: 0,
-//   scoreByCat: { color: 0, alphabet: 0, shape: 0, number: 0 },
-//   totalScore: 0
-// }
-
 let mqttClient;
 let pendingTimers = [];
 let leaderboardCache = null;
@@ -315,8 +315,6 @@ let leaderboardCache = null;
 // =====================================================================
 
 function initializeMQTT() {
-    console.log('Connecting to MQTT broker...');
-
     mqttClient = mqtt.connect(MQTT_BROKER, {
         clientId: 'EduBuddy_Dashboard_' + Math.random().toString(16).substr(2, 8),
         clean: true,
@@ -324,16 +322,8 @@ function initializeMQTT() {
     });
 
     mqttClient.on('connect', () => {
-        console.log('Connected to MQTT broker.');
         setMqttDot(true);
-
-        mqttClient.subscribe([
-            MQTT_TOPICS.answer,
-            MQTT_TOPICS.status,
-            MQTT_TOPICS.sessionStart,
-            MQTT_TOPICS.sessionEnd,
-            MQTT_TOPICS.resetBoard
-        ], (err) => {
+        mqttClient.subscribe(Object.values(MQTT_TOPICS), (err) => {
             if (err) console.error('Subscribe error:', err);
         });
     });
@@ -344,9 +334,9 @@ function initializeMQTT() {
         handleMqttMessage(topic, msg);
     });
 
-    mqttClient.on('error',   (e) => { console.error('MQTT error', e); setMqttDot(false); });
-    mqttClient.on('offline', ()   => { setMqttDot(false); });
-    mqttClient.on('reconnect', () => { console.log('MQTT reconnecting...'); });
+    mqttClient.on('error',   () => setMqttDot(false));
+    mqttClient.on('offline', () => setMqttDot(false));
+    mqttClient.on('reconnect', () => console.log('MQTT reconnecting...'));
 }
 
 function handleMqttMessage(topic, msg) {
@@ -357,11 +347,11 @@ function handleMqttMessage(topic, msg) {
 
         case MQTT_TOPICS.sessionStart:
             try {
-                const payload = JSON.parse(msg);
-                startSession(payload.name, payload.startCategory);
-            } catch (e) {
-                console.error('Bad session start payload:', msg);
-            }
+                const p = JSON.parse(msg);
+                loadQuestionBank().then(() => {
+                    startSession(p.name || '', p.startCategory || '', p.mode || 'test');
+                });
+            } catch (e) { console.error('Bad session start payload:', msg); }
             break;
 
         case MQTT_TOPICS.sessionEnd:
@@ -375,6 +365,10 @@ function handleMqttMessage(topic, msg) {
         case MQTT_TOPICS.answer:
             handleAnswerInput(msg);
             break;
+
+        case MQTT_TOPICS.nextCat:
+            advanceToNextCategory();
+            break;
     }
 }
 
@@ -382,33 +376,35 @@ function handleMqttMessage(topic, msg) {
 // SESSION FLOW
 // =====================================================================
 
-function startSession(name, startCategory) {
+function startSession(name, startCategory, mode) {
     if (!questionBank) {
-        console.warn('Question bank not loaded yet, ignoring session start.');
+        console.warn('Question bank not loaded yet.');
         return;
     }
-    if (!CATEGORY_ORDER.includes(startCategory)) {
-        console.warn('Unknown start category:', startCategory);
+
+    const catOrder = getCategoryOrder();
+    if (catOrder.length === 0) {
+        console.warn('No categories in question bank.');
         return;
     }
 
     cancelAllTimers();
     hideFeedbackOverlay();
 
-    // Build rotated category order: e.g. start at "shape" → [shape, number, color, alphabet]
-    const startIdx = CATEGORY_ORDER.indexOf(startCategory);
-    const rotated = [];
-    for (let i = 0; i < CATEGORY_ORDER.length; i++) {
-        rotated.push(CATEGORY_ORDER[(startIdx + i) % CATEGORY_ORDER.length]);
-    }
+    const startIdx = catOrder.includes(startCategory) ? catOrder.indexOf(startCategory) : 0;
+    const rotated = catOrder.map((_, i) => catOrder[(startIdx + i) % catOrder.length]);
+
+    const scoreByCat = {};
+    rotated.forEach(c => scoreByCat[c] = 0);
 
     session = {
-        name: name,
+        name:       name,
+        mode:       mode,           // 'learning' or 'test'
         categories: rotated,
-        catIdx: 0,
-        questions: shuffle(questionBank[rotated[0]].slice()),
-        qIdx: 0,
-        scoreByCat: { color: 0, alphabet: 0, shape: 0, number: 0 },
+        catIdx:     0,
+        questions:  shuffle(questionBank[rotated[0]].slice()),
+        qIdx:       0,
+        scoreByCat,
         totalScore: 0
     };
 
@@ -419,9 +415,19 @@ function startSession(name, startCategory) {
 function runCountdown(category) {
     state = STATES.COUNTDOWN;
     showScreen('countdown-screen');
-    document.getElementById('countdown-name').textContent = session.name;
-    document.getElementById('countdown-category').textContent =
-        CATEGORY_DISPLAY[category].label + ' ' + CATEGORY_DISPLAY[category].emoji;
+
+    const catDisp = getCategoryDisplay(category);
+
+    // Show student name only in test mode
+    const nameWrap = document.getElementById('countdown-name-wrap');
+    if (session.mode === 'test' && session.name) {
+        document.getElementById('countdown-name').textContent = session.name;
+        nameWrap.style.display = '';
+    } else {
+        nameWrap.style.display = 'none';
+    }
+
+    document.getElementById('countdown-category').textContent = catDisp.label + ' ' + catDisp.emoji;
 
     const numEl = document.getElementById('countdown-num');
     let n = 3;
@@ -446,69 +452,87 @@ function runCountdown(category) {
 function showCurrentQuestion() {
     const q = session.questions[session.qIdx];
     const category = session.categories[session.catIdx];
-    const catDisp = CATEGORY_DISPLAY[category];
-    const progress = `Question ${session.qIdx + 1} / ${session.questions.length}`;
+    const catDisp = getCategoryDisplay(category);
+    const progress = `Q ${session.qIdx + 1} / ${session.questions.length}`;
+    const studentTag = (session.mode === 'test') ? session.name : '';
 
     if (q.type === 'mcq') {
         state = STATES.QUESTION_MCQ;
 
-        // Shuffle options so correct answer lands in a random slot each time
         const correctText = q.options[['A','B','C','D'].indexOf(q.correct)];
         const shuffledOptions = shuffle(q.options.slice());
         session.currentCorrect = ['A','B','C','D'][shuffledOptions.indexOf(correctText)];
 
-        document.getElementById('mcq-category').textContent = catDisp.emoji + ' ' + catDisp.label;
-        document.getElementById('mcq-progress').textContent = progress;
-        document.getElementById('mcq-student').textContent  = session.name;
-        document.getElementById('mcq-question').textContent = q.q;
-        document.getElementById('mcq-opt-a').textContent = shuffledOptions[0];
-        document.getElementById('mcq-opt-b').textContent = shuffledOptions[1];
-        document.getElementById('mcq-opt-c').textContent = shuffledOptions[2];
-        document.getElementById('mcq-opt-d').textContent = shuffledOptions[3];
+        document.getElementById('mcq-category').textContent  = catDisp.emoji + ' ' + catDisp.label;
+        document.getElementById('mcq-progress').textContent  = progress;
+        document.getElementById('mcq-student').textContent   = studentTag;
+        document.getElementById('mcq-question').textContent  = q.q;
+        document.getElementById('mcq-opt-a').textContent     = shuffledOptions[0];
+        document.getElementById('mcq-opt-b').textContent     = shuffledOptions[1];
+        document.getElementById('mcq-opt-c').textContent     = shuffledOptions[2];
+        document.getElementById('mcq-opt-d').textContent     = shuffledOptions[3];
+
+        const imgEl = document.getElementById('mcq-image');
+        if (q.image) { imgEl.src = q.image; imgEl.style.display = 'block'; }
+        else { imgEl.style.display = 'none'; }
+
         showScreen('mcq-screen');
-        showSimHint('⌨ Simulator: Press  A / B / C / D');
+        showSimHint('⌨ Simulator: A / B / C / D');
 
     } else if (q.type === 'tf') {
         state = STATES.QUESTION_TF;
-        document.getElementById('tf-category').textContent = catDisp.emoji + ' ' + catDisp.label;
-        document.getElementById('tf-progress').textContent = progress;
-        document.getElementById('tf-student').textContent  = session.name;
-        document.getElementById('tf-question').textContent = q.q;
-        document.getElementById('tf-opt-a').textContent = q.optionA;
-        document.getElementById('tf-opt-b').textContent = q.optionB;
+
+        document.getElementById('tf-category').textContent  = catDisp.emoji + ' ' + catDisp.label;
+        document.getElementById('tf-progress').textContent  = progress;
+        document.getElementById('tf-student').textContent   = studentTag;
+        document.getElementById('tf-question').textContent  = q.q;
+        document.getElementById('tf-opt-a').textContent     = q.optionA;
+        document.getElementById('tf-opt-b').textContent     = q.optionB;
+
+        const imgEl = document.getElementById('tf-image');
+        if (q.image) { imgEl.src = q.image; imgEl.style.display = 'block'; }
+        else { imgEl.style.display = 'none'; }
+
         showScreen('tf-screen');
-        showSimHint('⌨ Simulator: Press  1 = Card A  |  2 = Card B');
+        showSimHint('⌨ Simulator: Q = Card A  |  W = Card B');
+
+    } else if (q.type === 'card') {
+        state = STATES.QUESTION_CARD;
+
+        document.getElementById('card-category').textContent = catDisp.emoji + ' ' + catDisp.label;
+        document.getElementById('card-progress').textContent  = progress;
+        document.getElementById('card-student').textContent   = studentTag;
+        document.getElementById('card-question').textContent  = q.q;
+
+        const imgEl = document.getElementById('card-image');
+        if (q.image) { imgEl.src = q.image; imgEl.style.display = 'block'; }
+        else { imgEl.style.display = 'none'; }
+
+        showScreen('card-screen');
+        showSimHint('⌨ Simulator: Press 1 / 2 / 3 / 4 / 5 to tap a card');
     }
-}
-
-function showSimHint(text) {
-    const el = document.getElementById('sim-hint');
-    if (!el) return;
-    el.textContent = text;
-    el.style.display = 'block';
-}
-
-function hideSimHint() {
-    const el = document.getElementById('sim-hint');
-    if (el) el.style.display = 'none';
 }
 
 function handleAnswerInput(msg) {
     const q = session ? session.questions[session.qIdx] : null;
 
-    // MCQ: accept BTN_A..BTN_D only
     if (state === STATES.QUESTION_MCQ && q) {
         const m = msg.match(/^BTN_([A-D])$/);
-        if (!m) return; // ignore card scans during MCQ
-        const chosen = m[1];
-        scoreAnswer(chosen === session.currentCorrect);
+        if (!m) return;
+        scoreAnswer(m[1] === session.currentCorrect);
         return;
     }
 
-    // TF: accept card UIDs that map to A or B
     if (state === STATES.QUESTION_TF && q) {
         const card = TF_CARD_MAP[msg];
-        if (!card) return; // ignore button presses or unknown cards during TF
+        if (!card || !['A','B'].includes(card)) return; // ignore hunt cards during TF
+        scoreAnswer(card === q.correctCard);
+        return;
+    }
+
+    if (state === STATES.QUESTION_CARD && q) {
+        const card = TF_CARD_MAP[msg];
+        if (!card || !card.startsWith('CARD')) return; // ignore TF cards and buttons during hunt
         scoreAnswer(card === q.correctCard);
         return;
     }
@@ -541,63 +565,88 @@ function advanceAfterAnswer() {
 
 function showCategoryScoreboard() {
     state = STATES.CATEGORY_DONE;
-    const cat = session.categories[session.catIdx];
-    const catDisp = CATEGORY_DISPLAY[cat];
-    const score = session.scoreByCat[cat];
-    const max   = session.questions.length;
 
-    // Persist this category result to leaderboard
-    pushToLeaderboard(cat, session.name, score);
+    const cat     = session.categories[session.catIdx];
+    const catDisp = getCategoryDisplay(cat);
+    const score   = session.scoreByCat[cat];
+    const max     = session.questions.length;
+    const isLast  = session.catIdx >= session.categories.length - 1;
 
-    document.getElementById('cat-title').textContent =
-        catDisp.label + ' ' + catDisp.emoji + ' Done!';
+    // Save to leaderboard only in test mode
+    if (session.mode === 'test') {
+        pushToLeaderboard(cat, session.name, score);
+    }
+
+    document.getElementById('cat-title').textContent = catDisp.label + ' ' + catDisp.emoji + ' Done!';
     document.getElementById('cat-score').textContent = `${score} / ${max}`;
-    document.getElementById('cat-top-name').textContent = catDisp.label;
-    renderTop3('cat-top-list', cat);
 
-    // Decide next step
-    const isLastCategory = session.catIdx >= session.categories.length - 1;
-    if (isLastCategory) {
-        document.getElementById('cat-next').textContent = 'Almost done — final score next!';
+    // Show top 3 only in test mode
+    const top3Section = document.getElementById('cat-top3-section');
+    if (session.mode === 'test') {
+        top3Section.style.display = '';
+        document.getElementById('cat-top-name').textContent = catDisp.label;
+        renderTop3('cat-top-list', cat);
     } else {
-        const nextCat = session.categories[session.catIdx + 1];
-        const nextDisp = CATEGORY_DISPLAY[nextCat];
+        top3Section.style.display = 'none';
+    }
+
+    if (isLast) {
+        document.getElementById('cat-next').textContent = '🎉 All categories done! Teacher: tap Next for final score.';
+    } else {
+        const nextCat  = session.categories[session.catIdx + 1];
+        const nextDisp = getCategoryDisplay(nextCat);
         document.getElementById('cat-next').textContent =
-            'Next up: ' + nextDisp.label + ' ' + nextDisp.emoji;
+            'Next: ' + nextDisp.label + ' ' + nextDisp.emoji + ' — Teacher: tap Next Category';
     }
 
     showScreen('category-scoreboard');
     playSound('leaderboard');
+    // No auto-advance — teacher manually triggers next category via MQTT
+}
 
-    pendingTimers.push(setTimeout(() => {
-        if (isLastCategory) {
-            showFinalScoreboard();
-        } else {
-            // advance to next category
-            session.catIdx++;
-            session.qIdx = 0;
-            const newCat = session.categories[session.catIdx];
-            session.questions = shuffle(questionBank[newCat].slice());
-            pendingTimers.push(setTimeout(() => runCountdown(newCat), TIMING.betweenCategories));
-        }
-    }, TIMING.catScoreboard));
+function advanceToNextCategory() {
+    if (state !== STATES.CATEGORY_DONE) return;
+    cancelAllTimers();
+
+    const isLast = session.catIdx >= session.categories.length - 1;
+    if (isLast) {
+        showFinalScoreboard();
+    } else {
+        session.catIdx++;
+        session.qIdx = 0;
+        const newCat = session.categories[session.catIdx];
+        session.questions = shuffle(questionBank[newCat].slice());
+        pendingTimers.push(setTimeout(() => runCountdown(newCat), TIMING.betweenCategories));
+    }
 }
 
 function showFinalScoreboard() {
     state = STATES.FINAL_DONE;
 
-    // Persist overall score
-    const totalMax = totalQuestionsInSession();
-    pushToLeaderboard('overall', session.name, session.totalScore);
+    const totalMax = session.categories.reduce((sum, c) => sum + questionBank[c].length, 0);
 
-    document.getElementById('final-name').textContent  = session.name + "'s final score";
+    if (session.mode === 'test') {
+        pushToLeaderboard('overall', session.name, session.totalScore);
+        document.getElementById('final-name').textContent = session.name + "'s Final Score";
+    } else {
+        document.getElementById('final-name').textContent = 'Final Score';
+    }
+
     document.getElementById('final-score').textContent = session.totalScore;
     document.querySelector('#final-scoreboard .final-out-of').textContent = 'out of ' + totalMax;
-    renderTop3('final-top-list', 'overall');
+
+    // Show top 3 only in test mode
+    const top3Section = document.getElementById('final-top3-section');
+    if (session.mode === 'test') {
+        top3Section.style.display = '';
+        renderTop3('final-top-list', 'overall');
+    } else {
+        top3Section.style.display = 'none';
+    }
 
     showScreen('final-scoreboard');
     playSound('finalboard');
-    // Stays here until teacher starts a new session or clicks End Session
+    spawnConfetti();
 }
 
 function endSessionAndReturnToIdle() {
@@ -608,20 +657,9 @@ function endSessionAndReturnToIdle() {
     showScreen('idle-screen');
 }
 
-function totalQuestionsInSession() {
-    if (!questionBank || !session) return 0;
-    return session.categories.reduce(
-        (sum, c) => sum + questionBank[c].length, 0
-    );
-}
-
 // =====================================================================
-// LEADERBOARD (localStorage)
+// LEADERBOARD
 // =====================================================================
-
-function emptyLeaderboard() {
-    return { color: [], alphabet: [], shape: [], number: [], overall: [] };
-}
 
 async function fetchLeaderboardFromCloud() {
     try {
@@ -629,20 +667,16 @@ async function fetchLeaderboardFromCloud() {
             headers: { 'X-Master-Key': JSONBIN_KEY }
         });
         const json = await res.json();
-        leaderboardCache = json.record;
-        const empty = emptyLeaderboard();
-        for (const k of Object.keys(empty)) {
-            if (!Array.isArray(leaderboardCache[k])) leaderboardCache[k] = [];
-        }
+        leaderboardCache = json.record || {};
         console.log('Leaderboard loaded from cloud.');
     } catch (e) {
         console.warn('Failed to load leaderboard from cloud, starting fresh:', e);
-        leaderboardCache = emptyLeaderboard();
+        leaderboardCache = {};
     }
 }
 
 function loadLeaderboard() {
-    return leaderboardCache || emptyLeaderboard();
+    return leaderboardCache || {};
 }
 
 function saveLeaderboard(board) {
@@ -659,20 +693,20 @@ function saveLeaderboard(board) {
 
 function pushToLeaderboard(category, name, score) {
     const board = loadLeaderboard();
-    board[category].push({ name: name, score: score, ts: Date.now() });
-    // Sort high → low, keep only top N
+    if (!board[category]) board[category] = [];
+    board[category].push({ name, score, ts: Date.now() });
     board[category].sort((a, b) => b.score - a.score || a.ts - b.ts);
     saveLeaderboard(board);
 }
 
 function resetLeaderboard() {
-    saveLeaderboard(emptyLeaderboard());
+    saveLeaderboard({});
     console.log('Leaderboard reset.');
 }
 
 function renderTop3(elementId, category) {
     const board = loadLeaderboard();
-    const list = board[category] || [];
+    const list  = board[category] || [];
     const container = document.getElementById(elementId);
     container.innerHTML = '';
 
@@ -689,6 +723,7 @@ function renderTop3(elementId, category) {
         return;
     }
 
+    // Show ALL students — top 3 highlighted with medals, rest numbered below
     list.forEach((entry, i) => {
         const row = document.createElement('div');
         if (i < TOP_N) {
@@ -701,7 +736,7 @@ function renderTop3(elementId, category) {
         } else {
             row.className = 'top3-row others';
             row.innerHTML = `
-                <span class="rank">${i + 1}</span>
+                <span class="rank">#${i + 1}</span>
                 <span class="name">${escapeHtml(entry.name)}</span>
                 <span class="score">${entry.score}</span>
             `;
@@ -719,19 +754,72 @@ function showScreen(id) {
     document.getElementById(id).classList.add('active');
 }
 
+const CORRECT_MASCOTS = ['😄','🥳','🎉','⭐','🌟','😁','🏆','👏'];
+const WRONG_MASCOTS   = ['😅','🙈','😬','💪','🤔','😮'];
+
 function showFeedback(isCorrect) {
     state = STATES.FEEDBACK;
     const overlay = document.getElementById('feedback-overlay');
     const icon    = document.getElementById('feedback-icon');
     const text    = document.getElementById('feedback-text');
+    const mascot  = document.getElementById('feedback-mascot');
 
     overlay.classList.remove('correct', 'wrong');
     overlay.classList.add(isCorrect ? 'correct' : 'wrong');
-    icon.textContent = isCorrect ? '✓' : '✗';
-    text.textContent = isCorrect ? 'Correct!' : 'Try Again!';
+    icon.textContent   = isCorrect ? '✓' : '✗';
+    text.textContent   = isCorrect ? 'Correct!' : 'Try Again!';
+
+    // Pick a random mascot emoji
+    const pool = isCorrect ? CORRECT_MASCOTS : WRONG_MASCOTS;
+    mascot.textContent = pool[Math.floor(Math.random() * pool.length)];
+
+    // Force re-trigger mascot animation
+    mascot.style.animation = 'none';
+    mascot.offsetHeight; // reflow
+    mascot.style.animation = '';
+
     overlay.classList.add('show');
 
+    // Spawn floating stars on correct answer
+    if (isCorrect) spawnStars(overlay);
+
     playSound(isCorrect ? 'correct' : 'wrong');
+}
+
+function spawnConfetti() {
+    const colors = ['#f7b731','#f5576c','#667eea','#11998e','#38ef7d','#f093fb','#ff6b6b','#ffd700'];
+    // Clean up old confetti
+    document.querySelectorAll('.confetti-piece').forEach(c => c.remove());
+    for (let i = 0; i < 80; i++) {
+        const el = document.createElement('div');
+        el.className = 'confetti-piece';
+        el.style.left     = Math.random() * 100 + 'vw';
+        el.style.background = colors[Math.floor(Math.random() * colors.length)];
+        el.style.width    = (8 + Math.random() * 10) + 'px';
+        el.style.height   = (10 + Math.random() * 14) + 'px';
+        el.style.animationDuration  = (2.5 + Math.random() * 3) + 's';
+        el.style.animationDelay     = (Math.random() * 2) + 's';
+        el.style.borderRadius       = Math.random() > 0.5 ? '50%' : '3px';
+        document.body.appendChild(el);
+        // Auto-remove after animation
+        el.addEventListener('animationend', () => el.remove());
+    }
+}
+
+function spawnStars(overlay) {
+    const stars = ['⭐','🌟','✨','💫','🎊','🎈'];
+    // Remove old particles
+    overlay.querySelectorAll('.star-particle').forEach(s => s.remove());
+    for (let i = 0; i < 8; i++) {
+        const el = document.createElement('div');
+        el.className = 'star-particle';
+        el.textContent = stars[Math.floor(Math.random() * stars.length)];
+        el.style.left   = (15 + Math.random() * 70) + '%';
+        el.style.bottom = (10 + Math.random() * 30) + '%';
+        el.style.animationDelay = (Math.random() * 0.4) + 's';
+        el.style.fontSize = (1.5 + Math.random() * 2) + 'em';
+        overlay.appendChild(el);
+    }
 }
 
 function hideFeedbackOverlay() {
@@ -741,12 +829,24 @@ function hideFeedbackOverlay() {
 function setMqttDot(online) {
     document.getElementById('mqtt-dot').classList.toggle('online', !!online);
 }
+
 function setDeviceDot(online) {
     document.getElementById('device-dot').classList.toggle('online', !!online);
 }
 
+function showSimHint(text) {
+    const el = document.getElementById('sim-hint');
+    if (!el) return;
+    el.textContent = text;
+    el.style.display = 'block';
+}
+
+function hideSimHint() {
+    const el = document.getElementById('sim-hint');
+    if (el) el.style.display = 'none';
+}
+
 function shuffle(arr) {
-    // Fisher-Yates
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -768,26 +868,51 @@ function escapeHtml(s) {
 }
 
 // =====================================================================
-// BOOT
+// QUESTION BANK LOADER
 // =====================================================================
 
 async function loadQuestionBank() {
+    // Check localStorage for custom questions saved by the Question Builder
+    const custom = localStorage.getItem('edubuddy_custom_questions');
+    if (custom) {
+        try {
+            const parsed = JSON.parse(custom);
+            const cats = Object.keys(parsed).filter(k => !k.startsWith('_'));
+            if (cats.length > 0 && cats.every(c => Array.isArray(parsed[c]) && parsed[c].length > 0)) {
+                questionBank = parsed;
+                console.log('Custom question bank loaded from localStorage.');
+                showBankIndicator('custom');
+                return;
+            }
+        } catch (e) {
+            console.warn('Invalid custom questions in localStorage, falling back to default.');
+        }
+    }
+
     try {
         const res = await fetch('questions.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        questionBank = await res.json();
-        // Validate the categories we expect are present
-        for (const cat of CATEGORY_ORDER) {
-            if (!Array.isArray(questionBank[cat]) || questionBank[cat].length === 0) {
-                throw new Error('Missing or empty category: ' + cat);
-            }
-        }
-        console.log('Question bank loaded.');
+        const raw = await res.json();
+        delete raw._comment;
+        questionBank = raw;
+        console.log('Default question bank loaded.');
+        showBankIndicator('default');
     } catch (e) {
         console.error('Failed to load questions.json:', e);
-        alert('Failed to load questions.json — make sure you opened this page via Live Server (http://...) and not by double-clicking the file. Error: ' + e.message);
+        alert('Failed to load questions.json — open via Live Server (http://...), not by double-clicking. Error: ' + e.message);
     }
 }
+
+function showBankIndicator(type) {
+    const el = document.getElementById('bank-indicator');
+    if (!el) return;
+    el.textContent = type === 'custom' ? '📝 Custom Questions' : '📚 Default Questions';
+    el.style.display = 'inline';
+}
+
+// =====================================================================
+// BOOT
+// =====================================================================
 
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('Smart EduBuddy dashboard starting...');

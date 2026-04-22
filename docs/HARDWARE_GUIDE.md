@@ -1,416 +1,251 @@
-# Hardware Assembly Guide - Smart EduBuddy
+# Hardware Guide - Smart EduBuddy
 
-## 📦 Required Components
+## Required Components
 
-### Must Have
-| Component | Quantity | Approx. Cost (RM) |
-|-----------|----------|-------------------|
-| NodeMCU ESP8266 | 1 | 15-20 |
-| MFRC522 RFID Reader | 1 | 5-8 |
-| RFID Cards (13.56MHz) | 12+ | 10-15 |
-| USB Micro Cable | 1 | 3-5 |
-| Jumper Wires (F-F) | 7 | 3-5 |
-| **Total** | | **~RM 40-55** |
+| Component | Qty | Approx. Cost (RM) |
+|---|---|---|
+| ESP32 Dev Module | 1 | 15–20 |
+| MFRC522 RFID Reader | 1 | 5–8 |
+| Push Buttons (momentary) | 4 | 2–4 |
+| RFID Cards (13.56MHz, ISO14443A) | 7+ | 5–10 |
+| USB Micro/Type-C Cable | 1 | 3–5 |
+| Jumper Wires (F-F / M-F) | 15+ | 3–5 |
+| **Total** | | **~RM 33–52** |
 
 ### Optional
 | Component | Purpose | Cost (RM) |
-|-----------|---------|-----------|
-| LED (any color) | Status indicator | 0.50 |
-| 220Ω Resistor | LED current limiting | 0.20 |
-| Breadboard | Prototyping | 5-8 |
-| Project Box | Housing | 10-15 |
-| Power Bank | Portable power | 20-30 |
+|---|---|---|
+| Breadboard | Prototyping | 5–8 |
+| Project box | Enclosure | 10–15 |
+| Power bank | Portable power | 20–30 |
 
-### Display & Audio (Existing Equipment)
-- Laptop/Desktop with speakers
-- TV/Monitor with HDMI (+ laptop)
-- Projector (optional)
+> **Use ESP32, not ESP8266.** The system needs 4 buttons + RFID simultaneously. ESP8266 can only support 2 buttons alongside RFID.
 
 ---
 
-## 🔌 Wiring Diagram
+## ESP32 Pin Wiring
 
-### MFRC522 RFID Reader to NodeMCU
+### MFRC522 RFID Reader
+
+| MFRC522 Pin | ESP32 GPIO | Notes |
+|---|---|---|
+| SDA (SS) | GPIO 5 | SPI chip select |
+| SCK | GPIO 18 | SPI clock |
+| MOSI | GPIO 23 | SPI data out |
+| MISO | GPIO 19 | SPI data in |
+| RST | GPIO 22 | Reset |
+| 3.3V | 3V3 | **NOT 5V** — MFRC522 is 3.3V only! |
+| GND | GND | |
+| IRQ | — | Not used |
+
+### 4 Push Buttons (MCQ)
+
+| Button | ESP32 GPIO | Wiring |
+|---|---|---|
+| Button A | GPIO 25 | One leg → GPIO 25, other leg → GND |
+| Button B | GPIO 26 | One leg → GPIO 26, other leg → GND |
+| Button C | GPIO 27 | One leg → GPIO 27, other leg → GND |
+| Button D | GPIO 32 | One leg → GPIO 32, other leg → GND |
+
+All buttons use `INPUT_PULLUP` — no resistors needed.
+
+### Status LED
+
+| LED | ESP32 GPIO |
+|---|---|
+| Built-in LED | GPIO 2 (most ESP32 dev boards) |
+
+---
+
+## Wiring Diagram
 
 ```
-     MFRC522 RFID Reader                    NodeMCU ESP8266
-    ┌──────────────────┐                   ┌─────────────────┐
-    │                  │                   │                 │
-    │  SDA   ──────────┼───────────────────┤ D4 (GPIO 2)     │
-    │  SCK   ──────────┼───────────────────┤ D5 (GPIO 14)    │
-    │  MOSI  ──────────┼───────────────────┤ D7 (GPIO 13)    │
-    │  MISO  ──────────┼───────────────────┤ D6 (GPIO 12)    │
-    │  IRQ   (not used)│                   │                 │
-    │  GND   ──────────┼───────────────────┤ GND             │
-    │  RST   ──────────┼───────────────────┤ D3 (GPIO 0)     │
-    │  3.3V  ──────────┼───────────────────┤ 3.3V            │
-    │                  │                   │                 │
-    └──────────────────┘                   └─────────────────┘
+ESP32 Dev Module
+┌──────────────────────────────────────────────┐
+│                                              │
+│  3V3 ──── Red ──────────────── MFRC522 3.3V │
+│  GND ──── Black ────────────── MFRC522 GND  │
+│  GPIO 5  ──── Blue  ────────── MFRC522 SDA  │
+│  GPIO 18 ──── Yellow ────────── MFRC522 SCK  │
+│  GPIO 23 ──── Orange ────────── MFRC522 MOSI │
+│  GPIO 19 ──── Green  ────────── MFRC522 MISO │
+│  GPIO 22 ──── Purple ────────── MFRC522 RST  │
+│                                              │
+│  GPIO 25 ──┐  Button A                      │
+│  GPIO 26 ──┤  Button B  (other leg → GND)   │
+│  GPIO 27 ──┤  Button C                      │
+│  GPIO 32 ──┘  Button D                      │
+│                                              │
+└──────────────────────────────────────────────┘
 ```
-
-### Pin Connections Table
-
-| MFRC522 Pin | Wire Color (suggested) | NodeMCU Pin | Pin Function |
-|-------------|------------------------|-------------|--------------|
-| SDA (SS)    | Blue                   | D4          | Slave Select |
-| SCK         | Yellow                 | D5          | Clock        |
-| MOSI        | Orange                 | D7          | Data Out     |
-| MISO        | Green                  | D6          | Data In      |
-| IRQ         | -                      | Not Used    | Interrupt    |
-| GND         | Black                  | GND         | Ground       |
-| RST         | Purple                 | D3          | Reset        |
-| 3.3V        | Red                    | 3.3V        | Power        |
 
 ---
 
 ## ⚠️ Important Warnings
 
-### Power Supply
 ```
-❌ DO NOT connect MFRC522 to 5V pin!
-✅ ALWAYS use 3.3V pin
+❌ DO NOT connect MFRC522 to 5V — it will be damaged!
+✅ ALWAYS use 3.3V
 
-The MFRC522 is designed for 3.3V operation.
-Connecting to 5V will damage the module!
-```
+❌ AVOID these ESP32 GPIO pins:
+   GPIO 0, 2, 12, 15  → boot strap pins (can prevent boot)
+   GPIO 6–11          → internal flash (do not use)
+   GPIO 34–39         → input-only, no internal pull-up
 
-### SPI Pins
-```
-✅ These specific pins MUST be used for SPI:
-   - D5 (GPIO 14) = SCK
-   - D6 (GPIO 12) = MISO
-   - D7 (GPIO 13) = MOSI
-
-❌ Cannot use other GPIO pins for SPI hardware communication
-```
-
-### SS and RST Pins
-```
-✅ These can be changed to other GPIO pins if needed:
-   - SDA/SS: Currently D4, can use D1, D2, D8, etc.
-   - RST: Currently D3, can use D1, D2, D8, etc.
-
-📝 If you change pins, update the Arduino code:
-   #define RST_PIN D3    // Change to your pin
-   #define SS_PIN D4     // Change to your pin
+✅ Buttons use INPUT_PULLUP — no external resistors needed
 ```
 
 ---
 
-## 🔧 Assembly Instructions
+## Assembly Steps
 
-### Step 1: Prepare Components
-1. Unpack all components
-2. Identify each pin on MFRC522
-3. Identify GPIO pins on NodeMCU
-4. Have jumper wires ready (Female-to-Female recommended)
-
-### Step 2: Wire the RFID Reader
-
-**Order matters for organization:**
-
-1. **Ground First** (Safety)
-   - MFRC522 GND → NodeMCU GND (black wire)
-
-2. **Power**
-   - MFRC522 3.3V → NodeMCU 3.3V (red wire)
-
-3. **SPI Communication**
-   - MFRC522 SCK → NodeMCU D5 (yellow wire)
-   - MFRC522 MOSI → NodeMCU D7 (orange wire)
-   - MFRC522 MISO → NodeMCU D6 (green wire)
-
-4. **Control Pins**
-   - MFRC522 SDA → NodeMCU D4 (blue wire)
-   - MFRC522 RST → NodeMCU D3 (purple wire)
-
-5. **IRQ pin** - Leave unconnected (not used)
-
-### Step 3: Add Optional LED (Status Indicator)
-
-```
-LED Wiring:
-  LED Anode (long leg, +) → 220Ω Resistor → NodeMCU D0
-  LED Cathode (short leg, -) → NodeMCU GND
-```
-
-Purpose: Blinks when card is detected
-
-### Step 4: Verify Connections
-
-**Before powering on, check:**
-- [ ] No loose wires
-- [ ] 3.3V (NOT 5V!) to MFRC522
-- [ ] All 7 connections made
-- [ ] No short circuits
-- [ ] SPI pins correct (D5, D6, D7)
+1. **Ground first** — MFRC522 GND → ESP32 GND
+2. **Power** — MFRC522 3.3V → ESP32 3V3
+3. **SPI lines** — SCK, MOSI, MISO, SDA, RST
+4. **4 buttons** — one leg each to GPIO 25/26/27/32, other leg to GND
+5. Verify all connections before powering on
 
 ---
 
-## 🧪 Testing Hardware
+## RFID Cards
 
-### Test 1: Power Test
-1. Connect NodeMCU to USB
-2. Check red power LED on NodeMCU lights up
-3. Check red LED on MFRC522 lights up
-4. If either doesn't light up, recheck connections
+### Cards Needed
 
-### Test 2: RFID Reader Test
-1. Upload the Arduino code
+| Purpose | Count | Description |
+|---|---|---|
+| TF questions | 2 | Two differently-coloured blank cards (e.g. blue + red) |
+| Card Hunt questions | Up to 5 | Any blank cards, labelled by teacher (optional) |
+
+### How to Label Cards
+
+- Stick printed pictures on blank white RFID cards
+- Use permanent markers and cover with clear tape
+- For Card Hunt: label physically on the card itself (e.g. picture of an apple, banana, etc.) — the TV doesn't show options
+
+### Enrolling Card UIDs (One-Time Setup)
+
+1. Flash `firmware/smart_edubuddy/smart_edubuddy.ino`
 2. Open Serial Monitor (115200 baud)
-3. Place RFID card on reader
-4. Should see "Card Detected" and UID printed
+3. Tap each card → copy the printed UID (uppercase hex, no spaces)
 
-**If not working:**
-- Check SPI wiring (D5, D6, D7)
-- Verify 3.3V power
-- Try different RFID card
-- Check RST and SS connections
-
-### Test 3: WiFi Connection Test
-1. Verify WiFi credentials in code
-2. Upload and monitor Serial
-3. Should see "WiFi Connected" and IP address
-
-**If not connecting:**
-- Check WiFi name and password
-- Ensure 2.4GHz network (not 5GHz)
-- Move closer to router
-- Check router allows new devices
-
----
-
-## 📐 Physical Assembly Options
-
-### Option 1: Breadboard Setup (Prototyping)
-
-**Advantages:**
-- Easy to modify
-- No soldering required
-- Good for testing
-
-**Disadvantages:**
-- Wires can come loose
-- Not portable
-- Takes up space
-
-### Option 2: Project Box (Recommended)
-
-**Materials Needed:**
-- Small plastic project box (10x10x5 cm)
-- Double-sided tape or hot glue
-- Drill for USB hole (optional)
-
-**Assembly:**
-1. Mount NodeMCU inside box with tape
-2. Mount RFID reader on top surface
-3. Route wires neatly inside
-4. Cut hole for USB cable
-5. Close and secure box
-
-**Benefits:**
-- Professional appearance
-- Protected from damage
-- Portable
-- Child-safe
-
-### Option 3: 3D Printed Enclosure
-
-If you have access to 3D printer:
-- Design custom enclosure
-- Include mounting points
-- Add labeling
-- Create cable management
-
----
-
-## 🎨 RFID Card Preparation
-
-### Physical Card Labeling
-
-**Method 1: Stickers**
-1. Print color/shape stickers
-2. Laminate for durability
-3. Apply to white RFID cards
-
-**Method 2: Markers**
-1. Use permanent markers
-2. Draw shapes/colors directly on cards
-3. Apply clear tape for protection
-
-**Method 3: Printed Labels**
-1. Design labels in Word/Canva
-2. Print on sticker paper
-3. Cut and apply to cards
-4. Laminate if possible
-
-### Card Organization
-
-**Create a Card Set:**
-```
-📦 Color Cards (Red pouch/bag):
-   🔴 Red
-   🔵 Blue
-   🟢 Green
-   🟡 Yellow
-   🟠 Orange
-   🟣 Purple
-
-📦 Shape Cards (Blue pouch/bag):
-   ⭕ Circle
-   🟦 Square
-   🔺 Triangle
-   ▭ Rectangle
-   ⭐ Star
-   ❤️ Heart
-```
-
-**Storage Tips:**
-- Use small plastic bags or pouches
-- Label each set clearly
-- Keep with the RFID station
-- Have spares for replacements
-
----
-
-## 🔍 Reading Card UIDs
-
-### Finding Your Card IDs
-
-1. **Upload Basic RFID Test Code:**
-```cpp
-#include <SPI.h>
-#include <MFRC522.h>
-
-#define RST_PIN D3
-#define SS_PIN D4
-
-MFRC522 mfrc522(SS_PIN, RST_PIN);
-
-void setup() {
-  Serial.begin(115200);
-  SPI.begin();
-  mfrc522.PCD_Init();
-  Serial.println("Scan cards to get UID...");
-}
-
-void loop() {
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
-    return;
-  }
-  
-  Serial.print("Card UID: ");
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? "0" : "");
-    Serial.print(mfrc522.uid.uidByte[i], HEX);
-  }
-  Serial.println();
-  
-  mfrc522.PICC_HaltA();
-  delay(2000);
+**TF Cards — paste into `dashboard.js`:**
+```js
+const TF_CARD_MAP = {
+    'YOUR_CARD_A_UID': 'A',   // e.g. 'AB12CD34'
+    'YOUR_CARD_B_UID': 'B',
+    ...
 }
 ```
 
-2. **Scan Each Card:**
-   - Place card on reader
-   - Note UID from Serial Monitor
-   - Write UID on card back with marker
-   - Record in spreadsheet
-
-3. **Create Card Database:**
-   - Open `dashboard.js`
-   - Update `cardDatabase` with actual UIDs:
-
-```javascript
-const cardDatabase = {
-    'A1B2C3D4': { type: 'color', name: 'Red', display: 'Color Red' },
-    'E5F6A7B8': { type: 'color', name: 'Blue', display: 'Color Blue' },
-    // ... add all your cards
-};
+**Card Hunt Cards — same file:**
+```js
+    'YOUR_HUNT_CARD_1_UID': 'CARD1',
+    'YOUR_HUNT_CARD_2_UID': 'CARD2',
+    'YOUR_HUNT_CARD_3_UID': 'CARD3',
+    'YOUR_HUNT_CARD_4_UID': 'CARD4',
+    'YOUR_HUNT_CARD_5_UID': 'CARD5',
 ```
 
 ---
 
-## 🧰 Maintenance & Care
+## Firmware Upload
 
-### Daily Checks
-- Ensure USB cable is secure
-- Verify RFID reader is clean
-- Check WiFi connection
-- Wipe cards if dirty
+```
+1. Open firmware/smart_edubuddy/smart_edubuddy.ino in Arduino IDE
+2. Tools → Board → ESP32 Dev Module
+3. Tools → Port → [select your COM port]
+4. Edit WiFi credentials (~line 36–37):
+       const char* ssid     = "YOUR_WIFI_NAME";
+       const char* password = "YOUR_WIFI_PASSWORD";
+5. (Optional) Change MQTT broker (~line 40) if using private broker
+6. Click Upload
+```
 
-### Weekly Maintenance
-- Inspect wire connections
-- Clean RFID reader surface with dry cloth
-- Check for loose components
-- Test with all cards
-
-### Troubleshooting Tips
-
-**RFID Reader Not Working:**
-1. Check 3.3V power (measure with multimeter)
-2. Verify SPI connections
-3. Try different USB cable/power source
-4. Test with different RFID card
-
-**Intermittent Connection:**
-1. Tighten jumper wire connections
-2. Use shorter wires if possible
-3. Solder connections for permanent fix
-4. Check for electromagnetic interference
-
-**Cards Not Reading:**
-1. Clean card surface
-2. Hold card steady for 1-2 seconds
-3. Check card is 13.56MHz compatible
-4. Try different cards to isolate issue
+Required Arduino libraries: `MFRC522`, `PubSubClient`, ESP32 board package.
 
 ---
 
-## 💡 Pro Tips
+## Hardware Testing
 
-### For Better Performance:
-1. **Power**: Use quality USB cable and power source
-2. **Wires**: Use shortest possible jumper wires
-3. **Placement**: Keep RFID reader away from metal surfaces
-4. **Cards**: Use quality ISO14443A cards
-5. **WiFi**: Position NodeMCU for strong signal
+### Test 1 — Power
+- Connect ESP32 via USB
+- Both ESP32 and MFRC522 power LEDs should light up
 
-### For Classroom Use:
-1. **Mounting**: Secure RFID reader at child height
-2. **Marking**: Use tape to show card placement spot
-3. **Spares**: Have extra NodeMCU and reader ready
-4. **Backup**: Keep backup power bank charged
-5. **Instructions**: Laminate setup guide for quick reference
+### Test 2 — RFID Reader
+- Upload firmware
+- Open Serial Monitor (115200 baud)
+- Tap a card → should print "Card detected" and UID
 
----
+### Test 3 — Buttons
+- Use the `button_test.ino` sketch in `firmware/button_test/`
+- Press each button → Serial Monitor prints which button was pressed
 
-## 📋 Pre-Assembly Checklist
-
-Before starting assembly:
-- [ ] All components purchased and received
-- [ ] Arduino IDE installed on computer
-- [ ] USB cable compatible with NodeMCU
-- [ ] WiFi network name and password known
-- [ ] Workspace clear and organized
-- [ ] Good lighting available
-- [ ] Documentation printed or accessible
-- [ ] Multimeter available (optional but helpful)
+### Test 4 — Full System
+- Open dashboard (`index.html`) via Live Server
+- Open teacher panel (`teacher-panel.html`)
+- Start a Learning session — device dot should turn green
+- Press buttons A/B/C/D → answers should register on TV
 
 ---
 
-## 🎓 Learning Outcomes
+## Troubleshooting
 
-By completing this assembly, you will:
-- ✅ Understand ESP8266 GPIO pins
-- ✅ Learn SPI communication protocol
-- ✅ Practice proper wiring techniques
-- ✅ Gain IoT hardware experience
-- ✅ Understand power requirements
-- ✅ Develop troubleshooting skills
+| Problem | Fix |
+|---|---|
+| RFID not reading | Check 3.3V (not 5V), verify SPI wiring |
+| Button not responding | Check GPIO pin and GND connection |
+| WiFi not connecting | Use 2.4GHz network, check SSID/password |
+| Card UID not recognised | Re-enrol card, paste correct UID into `TF_CARD_MAP` |
+| Device dot red on dashboard | ESP32 not publishing `online` status — check MQTT connection |
 
 ---
 
-**Happy Building! 🔧**
+## Power
 
-*Take your time, double-check connections, and don't hesitate to test at each step!*
+```
+USB 5V (phone charger or power bank)
+       │
+       ▼
+  ESP32 module  (converts 5V → 3.3V internally)
+       │
+       │ 3.3V
+       ▼
+  MFRC522 RFID reader
+
+Total draw:
+  Idle:  ~80mA  (0.4W)
+  Active: ~150mA (0.75W)
+```
+
+Minimum power source: 5V, 500mA. A standard phone charger or power bank works fine.
+
+---
+
+## Physical Setup in Classroom
+
+```
+┌─────────────────────────────────────┐
+│         [TV / PROJECTOR]            │
+└──────────────┬──────────────────────┘
+               │ HDMI
+        ┌──────┴──────┐
+        │   Laptop    │  ← index.html + question-builder.html
+        └─────────────┘
+
+          Students in semi-circle
+
+          ┌─────────────────┐
+          │  ESP32 Box      │  ← students approach one at a time
+          │  [RFID reader]  │
+          │  [A][B][C][D]   │  ← 4 buttons
+          └─────────────────┘
+
+                        ┌────────────┐
+                        │  Teacher   │
+                        │  Phone     │  ← teacher-panel.html
+                        └────────────┘
+```
+
+---
+
+*Hardware cost ~RM 33–52. Designed for Malaysian primary school classrooms.*
