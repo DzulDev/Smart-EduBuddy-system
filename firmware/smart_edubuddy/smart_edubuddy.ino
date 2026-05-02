@@ -38,8 +38,8 @@
 #include <SPI.h>
 
 // ----- WiFi Configuration -----
-const char *ssid = "YOUR_WIFI_SSID";
-const char *password = "YOUR_WIFI_PASSWORD";
+const char *ssid = "Dzul_2.4G";
+const char *password = "22022025";
 
 // ----- MQTT Configuration -----
 const char *mqtt_server = "broker.hivemq.com"; // Public broker (replace with your own for privacy)

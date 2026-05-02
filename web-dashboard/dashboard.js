@@ -39,14 +39,14 @@ function getCategoryOrder() {
 // --- TWO-CARD MAPPING (TF questions) ---------------------------------
 const TF_CARD_MAP = {
     // TF cards (2) — for True/False questions
-    'CARD_A_UID_HERE': 'A',
-    'CARD_B_UID_HERE': 'B',
+    'CARD_A_UID_HERE': 'DE152580',
+    'CARD_B_UID_HERE': 'E3CD2680',
     // Hunt cards (up to 5) — for Card Hunt questions
-    'HUNT_CARD_1_UID': 'CARD1',
-    'HUNT_CARD_2_UID': 'CARD2',
-    'HUNT_CARD_3_UID': 'CARD3',
-    'HUNT_CARD_4_UID': 'CARD4',
-    'HUNT_CARD_5_UID': 'CARD5',
+    'HUNT_CARD_1_UID': 'DE152580',
+    'HUNT_CARD_2_UID': 'E3CD2680',
+    'HUNT_CARD_3_UID': 'B6D12480',
+    'HUNT_CARD_4_UID': 'CAFD2580',
+    'HUNT_CARD_5_UID': '26312680',
     // Simulator: keyboard keys 1–5 for hunt cards, Q/W for TF cards
     'SIM_CARD_A': 'A',
     'SIM_CARD_B': 'B',
