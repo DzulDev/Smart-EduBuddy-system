@@ -37,24 +37,21 @@ function getCategoryOrder() {
 }
 
 // --- TWO-CARD MAPPING (TF questions) ---------------------------------
-const TF_CARD_MAP = {
-    // TF cards (2) — for True/False questions
-    'CARD_A_UID_HERE': 'DE152580',
-    'CARD_B_UID_HERE': 'E3CD2680',
-    // Hunt cards (up to 5) — for Card Hunt questions
-    'HUNT_CARD_1_UID': 'DE152580',
-    'HUNT_CARD_2_UID': 'E3CD2680',
-    'HUNT_CARD_3_UID': 'B6D12480',
-    'HUNT_CARD_4_UID': 'CAFD2580',
-    'HUNT_CARD_5_UID': '26312680',
+const CARD_UIDS = {
+    // Shared physical cards mapped to logical roles depending on the question mode
+    'DE152580': { tf: 'A', hunt: 'CARD1' },
+    'E3CD2680': { tf: 'B', hunt: 'CARD2' },
+    'B6D12480': { hunt: 'CARD3' },
+    'CAFD2580': { hunt: 'CARD4' },
+    '26312680': { hunt: 'CARD5' },
     // Simulator: keyboard keys 1–5 for hunt cards, Q/W for TF cards
-    'SIM_CARD_A': 'A',
-    'SIM_CARD_B': 'B',
-    'SIM_CARD_1': 'CARD1',
-    'SIM_CARD_2': 'CARD2',
-    'SIM_CARD_3': 'CARD3',
-    'SIM_CARD_4': 'CARD4',
-    'SIM_CARD_5': 'CARD5'
+    'SIM_CARD_A': { tf: 'A' },
+    'SIM_CARD_B': { tf: 'B' },
+    'SIM_CARD_1': { hunt: 'CARD1' },
+    'SIM_CARD_2': { hunt: 'CARD2' },
+    'SIM_CARD_3': { hunt: 'CARD3' },
+    'SIM_CARD_4': { hunt: 'CARD4' },
+    'SIM_CARD_5': { hunt: 'CARD5' }
 };
 
 const JSONBIN_ID  = '69e457a9aaba88219714735f';
@@ -523,15 +520,18 @@ function handleAnswerInput(msg) {
         return;
     }
 
+    const mapping = CARD_UIDS[msg];
+    if (!mapping) return;
+
     if (state === STATES.QUESTION_TF && q) {
-        const card = TF_CARD_MAP[msg];
+        const card = mapping.tf;
         if (!card || !['A','B'].includes(card)) return; // ignore hunt cards during TF
         scoreAnswer(card === q.correctCard);
         return;
     }
 
     if (state === STATES.QUESTION_CARD && q) {
-        const card = TF_CARD_MAP[msg];
+        const card = mapping.hunt;
         if (!card || !card.startsWith('CARD')) return; // ignore TF cards and buttons during hunt
         scoreAnswer(card === q.correctCard);
         return;
