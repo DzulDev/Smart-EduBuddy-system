@@ -162,17 +162,25 @@ function loadCategoryOptions() {
     const sel = document.getElementById('start-category');
     sel.innerHTML = '';
 
-    const defaults = ['color', 'alphabet', 'shape', 'number'];
-    let cats = defaults;
+    let cats = [];
 
     try {
         const stored = localStorage.getItem('edubuddy_custom_questions');
         if (stored) {
             const bank = JSON.parse(stored);
-            const keys = Object.keys(bank).filter(k => !k.startsWith('_'));
-            if (keys.length > 0) cats = keys;
+            cats = Object.keys(bank).filter(k => !k.startsWith('_'));
         }
     } catch (_) {}
+
+    if (cats.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No categories — create questions first';
+        opt.disabled = true;
+        opt.selected = true;
+        sel.appendChild(opt);
+        return;
+    }
 
     cats.forEach(cat => {
         const opt = document.createElement('option');
