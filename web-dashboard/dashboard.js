@@ -36,22 +36,16 @@ function getCategoryOrder() {
     return Object.keys(questionBank).filter(k => !k.startsWith('_'));
 }
 
-// --- TWO-CARD MAPPING (TF questions) ---------------------------------
+// --- CARD MAPPING ---------------------------------------------------
 const CARD_UIDS = {
-    // Shared physical cards mapped to logical roles depending on the question mode
-    'DE152580': { tf: 'A', hunt: 'CARD1' },
-    'E3CD2680': { tf: 'B', hunt: 'CARD2' },
+    // Dedicated TF cards (not shared with hunt)
+    'FDA2D406': { tf: 'A' },   // Yes / True card
+    '26312680': { tf: 'B' },   // No / False card
+    // Hunt cards
+    'DE152580': { hunt: 'CARD1' },
+    'E3CD2680': { hunt: 'CARD2' },
     'B6D12480': { hunt: 'CARD3' },
-    'CAFD2580': { hunt: 'CARD4' },
-    '26312680': { hunt: 'CARD5' },
-    // Simulator: keyboard keys 1–5 for hunt cards, Q/W for TF cards
-    'SIM_CARD_A': { tf: 'A' },
-    'SIM_CARD_B': { tf: 'B' },
-    'SIM_CARD_1': { hunt: 'CARD1' },
-    'SIM_CARD_2': { hunt: 'CARD2' },
-    'SIM_CARD_3': { hunt: 'CARD3' },
-    'SIM_CARD_4': { hunt: 'CARD4' },
-    'SIM_CARD_5': { hunt: 'CARD5' }
+    'CAFD2580': { hunt: 'CARD4' }
 };
 
 const JSONBIN_ID  = '69e457a9aaba88219714735f';
@@ -267,23 +261,6 @@ window.addEventListener('click',      unlockAudioOnce);
 window.addEventListener('keydown',    unlockAudioOnce);
 window.addEventListener('touchstart', unlockAudioOnce);
 
-// --- KEYBOARD SIMULATOR --------------------------------------------------
-// MCQ:       A/B/C/D  → button press
-// TF:        Q = Card A,  W = Card B
-// Card Hunt: 1–5      → Hunt Card 1–5
-window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const key = e.key.toUpperCase();
-    if (state === STATES.QUESTION_MCQ && ['A','B','C','D'].includes(key)) {
-        handleAnswerInput('BTN_' + key);
-    } else if (state === STATES.QUESTION_TF) {
-        if (key === 'Q') handleAnswerInput('SIM_CARD_A');
-        if (key === 'W') handleAnswerInput('SIM_CARD_B');
-    } else if (state === STATES.QUESTION_CARD) {
-        const num = parseInt(key);
-        if (num >= 1 && num <= 5) handleAnswerInput('SIM_CARD_' + num);
-    }
-});
 
 // =====================================================================
 // STATE
@@ -474,7 +451,6 @@ function showCurrentQuestion() {
         else { imgEl.style.display = 'none'; }
 
         showScreen('mcq-screen');
-        showSimHint('⌨ Simulator: A / B / C / D');
 
     } else if (q.type === 'tf') {
         state = STATES.QUESTION_TF;
@@ -491,7 +467,6 @@ function showCurrentQuestion() {
         else { imgEl.style.display = 'none'; }
 
         showScreen('tf-screen');
-        showSimHint('⌨ Simulator: Q = Card A  |  W = Card B');
 
     } else if (q.type === 'card') {
         state = STATES.QUESTION_CARD;
@@ -506,7 +481,6 @@ function showCurrentQuestion() {
         else { imgEl.style.display = 'none'; }
 
         showScreen('card-screen');
-        showSimHint('⌨ Simulator: Press 1 / 2 / 3 / 4 / 5 to tap a card');
     }
 }
 
@@ -539,7 +513,6 @@ function handleAnswerInput(msg) {
 }
 
 function scoreAnswer(isCorrect) {
-    hideSimHint();
     const cat = session.categories[session.catIdx];
     if (isCorrect) {
         session.scoreByCat[cat]++;
@@ -834,18 +807,6 @@ function setDeviceDot(online) {
     document.getElementById('device-dot').classList.toggle('online', !!online);
 }
 
-function showSimHint(text) {
-    const el = document.getElementById('sim-hint');
-    if (!el) return;
-    el.textContent = text;
-    el.style.display = 'block';
-}
-
-function hideSimHint() {
-    const el = document.getElementById('sim-hint');
-    if (el) el.style.display = 'none';
-}
-
 function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -895,18 +856,26 @@ async function loadQuestionBank() {
         const raw = await res.json();
         delete raw._comment;
         questionBank = raw;
-        console.log('Default question bank loaded.');
-        showBankIndicator('default');
+        const cats = Object.keys(raw).filter(k => !k.startsWith('_'));
+        if (cats.length === 0) {
+            showBankIndicator('empty');
+        } else {
+            console.log('Default question bank loaded.');
+            showBankIndicator('default');
+        }
     } catch (e) {
         console.error('Failed to load questions.json:', e);
-        alert('Failed to load questions.json — open via Live Server (http://...), not by double-clicking. Error: ' + e.message);
+        questionBank = {};
+        showBankIndicator('empty');
     }
 }
 
 function showBankIndicator(type) {
     const el = document.getElementById('bank-indicator');
     if (!el) return;
-    el.textContent = type === 'custom' ? '📝 Custom Questions' : '📚 Default Questions';
+    if (type === 'custom')       el.textContent = '📝 Custom Questions';
+    else if (type === 'empty')   el.textContent = '⚠️ No questions yet — use Question Builder';
+    else                         el.textContent = '📚 Default Questions';
     el.style.display = 'inline';
 }
 
