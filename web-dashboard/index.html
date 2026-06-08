@@ -182,6 +182,15 @@
             padding: 10px 20px;
             border-radius: 30px;
         }
+        .q-header .timer-tag {
+            color: var(--brand);
+            font-weight: 800;
+            font-size: 1.25em;
+            background: #eef0ff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.1);
+        }
 
         /* ===== QUESTION TEXT ===== */
         .question-text {
@@ -265,23 +274,24 @@
             padding: 52px 36px;
             font-size: 2.5em;
             font-weight: 900;
-            color: white;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+            color: #222;
+            background: white;
+            border: 3px solid #222;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.12);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 16px;
         }
         .tf-card .card-label {
-            background: rgba(255,255,255,0.28);
+            background: #eee;
+            color: #222;
             padding: 9px 24px;
             border-radius: 30px;
             font-size: 0.55em;
             font-weight: 800;
             letter-spacing: 0.5px;
         }
-        .tf-card.card-a { background: linear-gradient(135deg, #4facfe 0%, #00d2ff 100%); box-shadow: 0 12px 32px rgba(79,172,254,0.35); }
-        .tf-card.card-b { background: linear-gradient(135deg, var(--pink) 0%, #c0392b 100%); box-shadow: 0 12px 32px rgba(245,87,108,0.35); }
         .tf-hint {
             font-size: 1.4em;
             font-weight: 700;
@@ -371,6 +381,16 @@
             color: #777;
             margin: 12px 0 16px;
         }
+        #category-scoreboard .cat-time {
+            font-size: 2.2em;
+            font-weight: 800;
+            color: var(--brand);
+            margin-bottom: 12px;
+            background: #eef0ff;
+            padding: 6px 20px;
+            border-radius: 20px;
+            display: inline-block;
+        }
         #category-scoreboard .top3 {
             background: #f8f9ff;
             border-radius: 20px;
@@ -387,12 +407,26 @@
             font-weight: 800;
         }
 
-        /* ===== TOP 3 ROWS ===== */
-        .top3-row {
-            display: flex;
-            justify-content: space-between;
+        /* ===== TOP 3 TABLE ===== */
+        .top3-header, .top3-row {
+            display: grid;
+            grid-template-columns: 48px 1fr 90px 100px;
             align-items: center;
             padding: 14px 22px;
+        }
+        .top3-header {
+            color: #999;
+            font-size: 0.95em;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding-top: 0;
+            padding-bottom: 8px;
+        }
+        .top3-header .name  { text-align: left; padding-left: 18px; }
+        .top3-header .score,
+        .top3-header .time  { text-align: center; }
+        .top3-row {
             background: white;
             border-radius: 14px;
             margin-bottom: 8px;
@@ -400,10 +434,11 @@
             font-weight: 800;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-        .top3-row .rank  { color: var(--pink); min-width: 28px; }
-        .top3-row .name  { flex: 1; text-align: left; padding-left: 18px; color: #333; }
-        .top3-row .score { color: var(--brand); }
-        .top3-row.empty  { color: #bbb; font-style: italic; font-weight: 600; justify-content: center; background: #fafafa; }
+        .top3-row .rank  { color: var(--pink); text-align: center; }
+        .top3-row .name  { text-align: left; padding-left: 18px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .top3-row .score { color: var(--brand); text-align: center; }
+        .top3-row .time  { color: #888; font-size: 0.7em; font-weight: 700; text-align: center; }
+        .top3-row.empty  { display: flex; justify-content: center; color: #bbb; font-style: italic; font-weight: 600; background: #fafafa; }
         .top3-row.gold   { background: linear-gradient(135deg, #ffe88a, #fff4c2); border-left: 5px solid #f7b731; }
         .top3-row.silver { background: linear-gradient(135deg, #dde0e5, #f0f2f5); border-left: 5px solid #adb5bd; }
         .top3-row.bronze { background: linear-gradient(135deg, #f0c98a, #fae5c0); border-left: 5px solid #cd7f32; }
@@ -440,6 +475,16 @@
             font-weight: 700;
             color: #aaa;
             margin-bottom: 22px;
+        }
+        #final-scoreboard .final-time {
+            font-size: 2.2em;
+            font-weight: 800;
+            color: var(--brand);
+            margin-bottom: 16px;
+            background: #eef0ff;
+            padding: 6px 20px;
+            border-radius: 20px;
+            display: inline-block;
         }
         #final-scoreboard .top3 {
             background: linear-gradient(135deg, #fffdf0, #fffae6);
@@ -588,6 +633,7 @@
             <div class="q-header">
                 <span class="category-badge" id="mcq-category">Color</span>
                 <span class="progress" id="mcq-progress">Q 1 / 5</span>
+                <span class="timer-tag" id="mcq-timer" style="display: none;">⏱️ 0.0s</span>
                 <span class="student-tag" id="mcq-student">Ali</span>
             </div>
             <div class="question-text" id="mcq-question">Question text here</div>
@@ -605,17 +651,18 @@
             <div class="q-header">
                 <span class="category-badge" id="tf-category">Color</span>
                 <span class="progress" id="tf-progress">Q 4 / 5</span>
+                <span class="timer-tag" id="tf-timer" style="display: none;">⏱️ 0.0s</span>
                 <span class="student-tag" id="tf-student">Ali</span>
             </div>
             <div class="question-text" id="tf-question">Statement here</div>
             <img class="question-image" id="tf-image" src="" alt="Question image">
             <div class="tf-grid">
                 <div class="tf-card card-a">
-                    <div class="card-label">CARD A 🟦</div>
+                    <div class="card-label">CARD A</div>
                     <div id="tf-opt-a">True</div>
                 </div>
                 <div class="tf-card card-b">
-                    <div class="card-label">CARD B 🟥</div>
+                    <div class="card-label">CARD B</div>
                     <div id="tf-opt-b">False</div>
                 </div>
             </div>
@@ -627,6 +674,7 @@
             <div class="q-header">
                 <span class="category-badge" id="card-category">Category</span>
                 <span class="progress" id="card-progress">Q 1 / 5</span>
+                <span class="timer-tag" id="card-timer" style="display: none;">⏱️ 0.0s</span>
                 <span class="student-tag" id="card-student"></span>
             </div>
             <div class="question-text" id="card-question">Question here</div>
@@ -640,12 +688,19 @@
         <section class="screen" id="category-scoreboard">
             <div class="cat-title" id="cat-title">Color Done!</div>
             <div class="cat-score" id="cat-score">4 / 5</div>
+            <div class="cat-time" id="cat-time" style="display: none;">⏱️ Time taken: 0.0s</div>
             <div class="cat-next" id="cat-next">Next up: Alphabet 🔤 — Teacher: tap Next Category</div>
 
             <!-- Only shown in Test mode -->
             <div id="cat-top3-section">
                 <div class="top3">
                     <h3>🏆 Top 3 — <span id="cat-top-name">Color</span></h3>
+                    <div class="top3-header">
+                        <span class="rank"></span>
+                        <span class="name">Name</span>
+                        <span class="score">Score</span>
+                        <span class="time">Time</span>
+                    </div>
                     <div id="cat-top-list"></div>
                 </div>
             </div>
@@ -657,11 +712,18 @@
             <div class="final-name" id="final-name">Ali's Final Score</div>
             <div class="final-score" id="final-score">18</div>
             <div class="final-out-of">out of 20</div>
+            <div class="final-time" id="final-time" style="display: none;">⏱️ Total time taken: 0.0s</div>
 
             <!-- Only shown in Test mode -->
             <div id="final-top3-section">
                 <div class="top3">
                     <h3>🏆 Overall Top 3</h3>
+                    <div class="top3-header">
+                        <span class="rank"></span>
+                        <span class="name">Name</span>
+                        <span class="score">Score</span>
+                        <span class="time">Time</span>
+                    </div>
                     <div id="final-top-list"></div>
                 </div>
             </div>

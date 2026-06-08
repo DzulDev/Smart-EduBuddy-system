@@ -220,5 +220,7 @@ Update **three** locations: `smart_edubuddy.ino` (TCP), `dashboard.js` (WSS), `t
 - **Leaderboard uses JSONBin.** Cloud-persisted. Keys are dynamic category names + `'overall'`. Don't assume fixed keys.
 - **TF_CARD_MAP placeholder UIDs** will not match any real card. Don't "fix" them — call them out if they look unset.
 - **Mode affects rendering.** Always check `session.mode` before rendering leaderboard or student name. Learning mode hides both.
+- **TF answer cards (`.tf-card`) are intentionally colour-neutral** (white background, black border) — don't re-add blue/red colour-coding to `card-a`/`card-b`. Color-coded answer boxes confuse kids during colour-category questions.
+- **Top 3 leaderboard rows render as a 4-column table** (`renderTop3` in `dashboard.js` → `.top3-row`/`.top3-header` grid: Rank | Name | Score | Time). Keep Score and Time as separate columns/spans — don't concatenate them back into one string.
 - **Public broker caveat.** Default `broker.hivemq.com` is shared. For real deployment, namespace topics (e.g. `edubuddy_school123/...`).
 - **Target audience is 3–7 year olds and non-technical teachers.** Large fonts, high contrast, plain language in all user-facing strings.

@@ -283,6 +283,7 @@ let session = null;
 let mqttClient;
 let pendingTimers = [];
 let leaderboardCache = null;
+let timerInterval = null;
 
 // =====================================================================
 // MQTT
@@ -379,7 +380,9 @@ function startSession(name, startCategory, mode) {
         questions:  shuffle(questionBank[rotated[0]].slice()),
         qIdx:       0,
         scoreByCat,
-        totalScore: 0
+        totalScore: 0,
+        timeByCat:  {},
+        totalTime:  0
     };
 
     console.log('Session started:', session);
@@ -429,6 +432,12 @@ function showCurrentQuestion() {
     const catDisp = getCategoryDisplay(category);
     const progress = `Q ${session.qIdx + 1} / ${session.questions.length}`;
     const studentTag = (session.mode === 'test') ? session.name : '';
+
+    if (session.qIdx === 0) {
+        session.catTimeSpent = 0;
+    }
+    startTimer();
+    session.qStartTime = Date.now();
 
     if (q.type === 'mcq') {
         state = STATES.QUESTION_MCQ;
@@ -513,6 +522,10 @@ function handleAnswerInput(msg) {
 }
 
 function scoreAnswer(isCorrect) {
+    stopTimer();
+    const elapsed = session.qStartTime ? (Date.now() - session.qStartTime) : 0;
+    session.catTimeSpent = (session.catTimeSpent || 0) + elapsed;
+
     const cat = session.categories[session.catIdx];
     if (isCorrect) {
         session.scoreByCat[cat]++;
@@ -545,13 +558,27 @@ function showCategoryScoreboard() {
     const max     = session.questions.length;
     const isLast  = session.catIdx >= session.categories.length - 1;
 
+    const catTime = session.catTimeSpent || 0;
+    session.timeByCat[cat] = catTime;
+    session.totalTime = (session.totalTime || 0) + catTime;
+
     // Save to leaderboard only in test mode
     if (session.mode === 'test') {
-        pushToLeaderboard(cat, session.name, score);
+        pushToLeaderboard(cat, session.name, score, catTime);
     }
 
     document.getElementById('cat-title').textContent = catDisp.label + ' ' + catDisp.emoji + ' Done!';
     document.getElementById('cat-score').textContent = `${score} / ${max}`;
+
+    const catTimeEl = document.getElementById('cat-time');
+    if (catTimeEl) {
+        if (session.mode === 'test') {
+            catTimeEl.textContent = `⏱️ Time taken: ${(catTime / 1000).toFixed(1)}s`;
+            catTimeEl.style.display = 'inline-block';
+        } else {
+            catTimeEl.style.display = 'none';
+        }
+    }
 
     // Show top 3 only in test mode
     const top3Section = document.getElementById('cat-top3-section');
@@ -598,11 +625,17 @@ function showFinalScoreboard() {
 
     const totalMax = session.categories.reduce((sum, c) => sum + questionBank[c].length, 0);
 
+    const finalTimeEl = document.getElementById('final-time');
     if (session.mode === 'test') {
-        pushToLeaderboard('overall', session.name, session.totalScore);
+        pushToLeaderboard('overall', session.name, session.totalScore, session.totalTime);
         document.getElementById('final-name').textContent = session.name + "'s Final Score";
+        if (finalTimeEl) {
+            finalTimeEl.textContent = `⏱️ Total time: ${(session.totalTime / 1000).toFixed(1)}s`;
+            finalTimeEl.style.display = 'inline-block';
+        }
     } else {
         document.getElementById('final-name').textContent = 'Final Score';
+        if (finalTimeEl) finalTimeEl.style.display = 'none';
     }
 
     document.getElementById('final-score').textContent = session.totalScore;
@@ -664,11 +697,21 @@ function saveLeaderboard(board) {
     }).catch(e => console.warn('Failed to save leaderboard to cloud:', e));
 }
 
-function pushToLeaderboard(category, name, score) {
+function pushToLeaderboard(category, name, score, time) {
     const board = loadLeaderboard();
     if (!board[category]) board[category] = [];
-    board[category].push({ name, score, ts: Date.now() });
-    board[category].sort((a, b) => b.score - a.score || a.ts - b.ts);
+    board[category].push({ name, score, time, ts: Date.now() });
+    board[category].sort((a, b) => {
+        if (b.score !== a.score) {
+            return b.score - a.score;
+        }
+        const aTime = a.time !== undefined ? a.time : 9999999;
+        const bTime = b.time !== undefined ? b.time : 9999999;
+        if (aTime !== bTime) {
+            return aTime - bTime;
+        }
+        return a.ts - b.ts;
+    });
     saveLeaderboard(board);
 }
 
@@ -699,21 +742,15 @@ function renderTop3(elementId, category) {
     // Show ALL students — top 3 highlighted with medals, rest numbered below
     list.forEach((entry, i) => {
         const row = document.createElement('div');
-        if (i < TOP_N) {
-            row.className = 'top3-row ' + medals[i];
-            row.innerHTML = `
-                <span class="rank">${icons[i]}</span>
-                <span class="name">${escapeHtml(entry.name)}</span>
-                <span class="score">${entry.score}</span>
-            `;
-        } else {
-            row.className = 'top3-row others';
-            row.innerHTML = `
-                <span class="rank">#${i + 1}</span>
-                <span class="name">${escapeHtml(entry.name)}</span>
-                <span class="score">${entry.score}</span>
-            `;
-        }
+        const timeStr = entry.time !== undefined ? `${(entry.time / 1000).toFixed(1)}s` : '—';
+        const rankStr = i < TOP_N ? icons[i] : `#${i + 1}`;
+        row.className = i < TOP_N ? 'top3-row ' + medals[i] : 'top3-row others';
+        row.innerHTML = `
+            <span class="rank">${rankStr}</span>
+            <span class="name">${escapeHtml(entry.name)}</span>
+            <span class="score">${entry.score}</span>
+            <span class="time">${timeStr}</span>
+        `;
         container.appendChild(row);
     });
 }
@@ -815,7 +852,43 @@ function shuffle(arr) {
     return arr;
 }
 
+function startTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    const start = Date.now();
+    const baseTime = (session && session.catTimeSpent) || 0;
+
+    const mcqTimer = document.getElementById('mcq-timer');
+    const tfTimer = document.getElementById('tf-timer');
+    const cardTimer = document.getElementById('card-timer');
+
+    const displayStyle = session ? '' : 'none';
+    if (mcqTimer) mcqTimer.style.display = displayStyle;
+    if (tfTimer) tfTimer.style.display = displayStyle;
+    if (cardTimer) cardTimer.style.display = displayStyle;
+
+    timerInterval = setInterval(() => {
+        if (!session) {
+            clearInterval(timerInterval);
+            return;
+        }
+        const elapsed = Date.now() - start;
+        const totalSec = ((baseTime + elapsed) / 1000).toFixed(1);
+
+        if (mcqTimer) mcqTimer.textContent = `⏱️ ${totalSec}s`;
+        if (tfTimer) tfTimer.textContent = `⏱️ ${totalSec}s`;
+        if (cardTimer) cardTimer.textContent = `⏱️ ${totalSec}s`;
+    }, 100);
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+}
+
 function cancelAllTimers() {
+    stopTimer();
     pendingTimers.forEach(t => clearTimeout(t));
     pendingTimers = [];
 }
@@ -889,4 +962,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadQuestionBank();
     await fetchLeaderboardFromCloud();
     initializeMQTT();
+});
+
+// Keyboard simulator for testing without hardware (as described in GUIDE_ME.md)
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const key = e.key.toUpperCase();
+    if (['A', 'B', 'C', 'D'].includes(key)) {
+        handleAnswerInput('BTN_' + key);
+    } else if (key === 'Q') {
+        handleAnswerInput('FDA2D406'); // Maps to TF Card A
+    } else if (key === 'W') {
+        handleAnswerInput('26312680'); // Maps to TF Card B
+    } else if (key === '1') {
+        handleAnswerInput('DE152580'); // Maps to Hunt Card 1
+    } else if (key === '2') {
+        handleAnswerInput('E3CD2680'); // Maps to Hunt Card 2
+    } else if (key === '3') {
+        handleAnswerInput('B6D12480'); // Maps to Hunt Card 3
+    } else if (key === '4') {
+        handleAnswerInput('CAFD2580'); // Maps to Hunt Card 4
+    }
 });

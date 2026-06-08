@@ -78,7 +78,12 @@ Student taps one of the **2 cards** on the RFID reader:
 | Blue Card (A) | First option (e.g. True, Yes) |
 | Red Card (B) | Second option (e.g. False, No) |
 
-The TV shows both options with their card labels.
+The TV shows both options as plain "CARD A" / "CARD B" boxes with a black border —
+**no colour-coding on screen**, so students don't confuse the answer cards with
+the colours being taught in colour-category questions. The blue/red colours above
+are just a suggestion for telling your two physical cards apart; label them
+clearly (e.g. a sticker with "A"/"B") so the teacher and students always know
+which physical card is which.
 
 ### Card Hunt Questions — Up To 5 RFID Cards
 
