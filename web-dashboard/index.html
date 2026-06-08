@@ -549,6 +549,8 @@
             top: 24px;
             left: 50%;
             transform: translateX(-50%) translateY(-140%);
+            opacity: 0;
+            visibility: hidden;
             background: linear-gradient(135deg, #ffd166, #ffb347);
             color: #5a3d00;
             padding: 16px 30px;
@@ -560,9 +562,14 @@
             max-width: 88%;
             text-align: center;
             line-height: 1.4;
-            transition: transform 0.4s ease;
+            transition: transform 0.4s ease, opacity 0.4s ease, visibility 0s linear 0.4s;
         }
-        .warning-toast.show { transform: translateX(-50%) translateY(0); }
+        .warning-toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            visibility: visible;
+            transition: transform 0.4s ease, opacity 0.4s ease, visibility 0s linear 0s;
+        }
 
         /* ===== Animations ===== */
         @keyframes fadeIn   { from { opacity: 0; }          to { opacity: 1; } }
