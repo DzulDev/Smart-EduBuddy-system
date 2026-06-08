@@ -20,7 +20,8 @@
       "Bash(node *)",
       "Bash(powershell -Command \"\\(Get-Item /tmp/qbank.json\\).Length\")",
       "Bash(git checkout *)",
-      "Bash(git revert *)"
+      "Bash(git revert *)",
+      "Bash(powershell *)"
     ]
   }
 }

@@ -15,11 +15,11 @@ Teachers can create **custom categories and questions**. Students answer using p
 
 | Page | Who Uses It | Link |
 |---|---|---|
-| Student Display | Shown on classroom TV — open on a laptop then plug HDMI cable from laptop to TV | https://smart-edubuddy-system.pages.dev/ |
-| Teacher Panel | Teacher's phone or laptop | https://smart-edubuddy-system.pages.dev/teacher-panel.html |
-| Question Builder | Teacher edits questions (laptop only) | https://smart-edubuddy-system.pages.dev/question-builder.html |
+| Student Display | Shown on classroom TV | https://smart-edubuddy-system.pages.dev/ |
+| Teacher Panel | Teacher controls the session | https://smart-edubuddy-system.pages.dev/teacher-panel.html |
+| Question Builder | Teacher edits questions | https://smart-edubuddy-system.pages.dev/question-builder.html |
 
-> **Note:** The Question Builder must be opened on the **same laptop as the Student Display** — they share browser storage (localStorage). Opening it on a different device will not affect the classroom session.
+> 💡 **Recommended setup:** Open all three pages — Student Display, Teacher Panel, and Question Builder — in different tabs on the **same laptop**, then plug an HDMI cable from that laptop to the classroom TV. This gives you the best view on the big screen while keeping everything in sync, since the Question Builder and Student Display **share browser storage (localStorage)** and only work together when on the same laptop.
 
 ---
 
@@ -100,9 +100,9 @@ Student finds the correct card and taps it on the reader.
 
 ---
 
-## Question Builder (Teacher — Laptop Only)
+## Question Builder (Teacher — Same Laptop as Display)
 
-Open `question-builder.html` on the **same laptop as the dashboard** (they share storage).
+Open `question-builder.html` in another tab on the **same laptop that's running the Student Display and plugged into the TV via HDMI** (they share browser storage). It has a phone-friendly layout too, but opening it on a different device won't sync — your changes only show up on the classroom display when it's on that same laptop.
 
 ### Creating Categories
 
