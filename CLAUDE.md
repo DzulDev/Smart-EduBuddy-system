@@ -27,8 +27,8 @@ The system is **not** a build-tooled app — there is no `package.json`, no bund
                                        ┌─────────────────────────┐
                                        │   Question Builder       │
                                        │  question-builder.html   │
-                                       │  saves → JSONBin (cloud) │
-                                       │  + localStorage (cache)  │
+                                       │  (laptop only)           │
+                                       │  saves → localStorage    │
                                        └─────────────────────────┘
 ```
 
@@ -47,7 +47,7 @@ The system is **not** a build-tooled app — there is no `package.json`, no bund
 
 1. Teacher picks mode (Learning/Test), optionally enters student name, picks starting category in `teacher-panel.html`, clicks Start
 2. Teacher panel publishes `edubuddy/session/start` with `{name, startCategory, mode}`
-3. Dashboard reloads question bank from the cloud (custom, JSONBin), falling back to this device's localStorage, then `questions.json` (default)
+3. Dashboard reloads question bank from localStorage (custom) or `questions.json` (default)
 4. Student display shows a 3-2-1-GO countdown
 5. Student plays through all questions in the current category (count = `questions[cat].length`)
 6. After each category, a scoreboard appears — **waits for teacher to publish `edubuddy/control/next_category`**
@@ -82,15 +82,9 @@ Input filtering by state:
 
 ### Storage
 
-Custom questions are **cloud-synced via JSONBin** (separate bin from the leaderboard, `QUESTIONS_BIN_ID`/`QUESTIONS_BIN_KEY`/`QUESTIONS_BIN_URL` constants — duplicated in `dashboard.js`, `teacher-panel.js`, and `question-builder.html` since there are no shared modules). The cloud bin is the **source of truth**: every device (Question Builder laptop, Teacher Panel laptop, Student Display TV) loads the same bank regardless of its own `localStorage`.
+Custom questions are stored in `localStorage` under key `edubuddy_custom_questions` on the dashboard laptop. On every `session/start`, the dashboard calls `loadQuestionBank()` which checks localStorage first, then falls back to `questions.json`.
 
-- **Question Builder** (`saveAll()`) writes to the cloud bin (PUT) and also caches to `localStorage['edubuddy_custom_questions']` for offline editing. On load, it fetches the cloud bank first; if the cloud is empty/unreachable it falls back to localStorage → `questions.json`, and **migrates** any local-only bank up to the cloud automatically.
-- **Dashboard** (`loadQuestionBank()`, called fresh on every `session/start`) fetches the cloud bank first, then falls back to its own localStorage, then `questions.json`.
-- **Teacher Panel** (`loadCategoryOptions()`) fetches the cloud bank to populate the starting-category dropdown, with the same localStorage fallback.
-
-This means the Question Builder, Teacher Panel, and Student Display **no longer need to be on the same device** — the cloud bin keeps them in sync. `localStorage` now only matters as an offline cache/fallback if JSONBin is unreachable.
-
-`questions.json` (the bundled default fallback) is currently `{}` (emptied in a prior cleanup) — it's the last-resort fallback only, used if the cloud is unreachable AND no device has a local cache.
+The teacher panel also reads localStorage to populate the starting category dropdown — so the question builder and teacher panel must be on the same device (laptop), or the teacher panel shows default categories.
 
 ### Format
 
@@ -223,8 +217,7 @@ Update **three** locations: `smart_edubuddy.ino` (TCP), `dashboard.js` (WSS), `t
 - **Firmware is a thin input layer.** Never add game logic to the firmware. All logic lives in `dashboard.js`.
 - **Categories are dynamic.** Do not hardcode category names anywhere in `dashboard.js`. Use `getCategoryOrder()` and `getCategoryDisplay(cat)`.
 - **Question bank reloads on every session start.** `loadQuestionBank()` is called inside the `session/start` handler, not just at boot.
-- **Question bank is cloud-synced via JSONBin** (`QUESTIONS_BIN_*` constants — separate bin from the leaderboard, fixed 2026-06-08 so the Question Builder, Teacher Panel, and Student Display stay in sync across devices without relying on shared `localStorage`). The cloud bin is the source of truth; `localStorage` and `questions.json` are offline fallbacks only. When changing question-bank load/save logic, update all three: `dashboard.js` (`loadQuestionBank`), `teacher-panel.js` (`loadCategoryOptions`), `question-builder.html` (`init`/`saveAll`).
-- **Leaderboard uses JSONBin.** Cloud-persisted (separate bin from questions — `JSONBIN_*` constants). Keys are dynamic category names + `'overall'`. Don't assume fixed keys.
+- **Leaderboard uses JSONBin.** Cloud-persisted. Keys are dynamic category names + `'overall'`. Don't assume fixed keys.
 - **TF_CARD_MAP placeholder UIDs** will not match any real card. Don't "fix" them — call them out if they look unset.
 - **Mode affects rendering.** Always check `session.mode` before rendering leaderboard or student name. Learning mode hides both.
 - **TF answer cards (`.tf-card`) are intentionally colour-neutral** (white background, black border) — don't re-add blue/red colour-coding to `card-a`/`card-b`. Color-coded answer boxes confuse kids during colour-category questions.

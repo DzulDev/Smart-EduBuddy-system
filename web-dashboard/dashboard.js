@@ -52,13 +52,6 @@ const JSONBIN_ID  = '69e457a9aaba88219714735f';
 const JSONBIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 
-// Cloud-synced custom question bank — same JSONBin account, separate bin.
-// This is the source of truth so every device (TV, laptops) sees the
-// same questions the teacher saved in the Question Builder.
-const QUESTIONS_BIN_ID  = '6a2649f8f5f4af5e29c92e72';
-const QUESTIONS_BIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
-const QUESTIONS_BIN_URL = `https://api.jsonbin.io/v3/b/${QUESTIONS_BIN_ID}`;
-
 const TOP_N = 3;
 
 const TIMING = {
@@ -928,43 +921,16 @@ function escapeHtml(s) {
 // QUESTION BANK LOADER
 // =====================================================================
 
-function bankHasCategories(bank) {
-    if (!bank || typeof bank !== 'object') return false;
-    const cats = Object.keys(bank).filter(k => !k.startsWith('_'));
-    return cats.length > 0 && cats.every(c => Array.isArray(bank[c]) && bank[c].length > 0);
-}
-
 async function loadQuestionBank() {
-    // Cloud bin is the source of truth — every device should see the same
-    // questions the teacher last saved in the Question Builder, regardless
-    // of what's in this device's own localStorage.
-    try {
-        const res = await fetch(QUESTIONS_BIN_URL + '/latest', {
-            headers: { 'X-Master-Key': QUESTIONS_BIN_KEY }
-        });
-        if (res.ok) {
-            const json = await res.json();
-            const cloudBank = json.record || {};
-            if (bankHasCategories(cloudBank)) {
-                questionBank = cloudBank;
-                console.log('Custom question bank loaded from cloud.');
-                showBankIndicator('custom');
-                return;
-            }
-        }
-    } catch (e) {
-        console.warn('Failed to load question bank from cloud, trying offline fallbacks:', e);
-    }
-
-    // Offline fallback — this device's own localStorage (e.g. Question Builder
-    // run on this same machine before ever syncing to the cloud)
+    // Check localStorage for custom questions saved by the Question Builder
     const custom = localStorage.getItem('edubuddy_custom_questions');
     if (custom) {
         try {
             const parsed = JSON.parse(custom);
-            if (bankHasCategories(parsed)) {
+            const cats = Object.keys(parsed).filter(k => !k.startsWith('_'));
+            if (cats.length > 0 && cats.every(c => Array.isArray(parsed[c]) && parsed[c].length > 0)) {
                 questionBank = parsed;
-                console.log('Custom question bank loaded from localStorage (offline fallback).');
+                console.log('Custom question bank loaded from localStorage.');
                 showBankIndicator('custom');
                 return;
             }
