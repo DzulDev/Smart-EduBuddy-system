@@ -139,7 +139,7 @@ Open `question-builder.html` on whichever device is convenient — phone, laptop
 
 | Button | Action |
 |---|---|
-| 🗑️ Clear All | Wipes all categories and questions (start from empty) — Export JSON first if you want a backup |
+| ↩ Reset to Default | Restore built-in questions |
 | 📤 Export JSON | Download questions as a backup file |
 | 📥 Import JSON | Load questions from a file |
 
