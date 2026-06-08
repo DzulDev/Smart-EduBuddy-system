@@ -34,6 +34,24 @@
             margin: 0 auto;
         }
 
+        /* Phone is the primary target (this panel lives in a teacher's
+           pocket), so the base styles above are already single-column and
+           full-width. On a laptop screen a 520px column is comfortable to
+           read but leaves the sides empty — give it a bit more room and
+           let a couple of card pairs sit side by side to use the space. */
+        @media (min-width: 760px) {
+            .container { max-width: 640px; }
+            .row-2up { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
+            .row-2up .card { margin-bottom: 0; }
+        }
+
+        /* Very narrow phones: the 2-up grids (mode toggle, session
+           controls) get cramped — stack them */
+        @media (max-width: 380px) {
+            .mode-toggle  { grid-template-columns: 1fr; }
+            .button-row   { grid-template-columns: 1fr; }
+        }
+
         /* ===== PAGE HEADER ===== */
         .page-header {
             text-align: center;
@@ -294,31 +312,6 @@
             margin: 16px 0;
         }
 
-        /* ===== HARDWARE REFERENCE GRID ===== */
-        .hw-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 4px;
-        }
-        .hw-item {
-            background: #f8f9ff;
-            border-radius: 12px;
-            padding: 12px 14px;
-            font-size: 0.88em;
-            font-weight: 600;
-            color: #555;
-            border: 1.5px solid #e8ecf8;
-        }
-        .hw-item .hw-label {
-            font-weight: 800;
-            color: var(--brand);
-            font-size: 0.85em;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            margin-bottom: 4px;
-        }
-
         /* ===== BUILDER LINK ===== */
         .builder-link {
             display: flex;
@@ -429,48 +422,32 @@
             </button>
         </div>
 
-        <!-- Controls -->
-        <div class="card">
-            <div class="card-title">Session Controls</div>
-            <div class="button-row">
-                <button class="button button-secondary" onclick="endSession()">⏹ End Session</button>
-                <button class="button button-danger"    onclick="resetLeaderboard()">🗑 Reset Leaderboard</button>
-            </div>
-            <button class="button button-download" onclick="downloadScoreboard()">📥 Download Scoreboard (CSV)</button>
-            <div class="info-box">
-                <strong>End Session:</strong> stops the current student mid-quiz.<br>
-                <strong>Reset Leaderboard:</strong> wipes all Top 3 scores permanently.<br>
-                <strong>Download Scoreboard:</strong> exports every category's rankings + overall as a CSV file — opens straight in Google Sheets or Excel.
-            </div>
-        </div>
-
-        <!-- Question Builder link -->
-        <div class="card">
-            <div class="card-title">Question Bank</div>
-            <a class="builder-link" href="question-builder.html" target="_blank">
-                ✏️ Open Question Builder
-            </a>
-            <div class="info-box">
-                Add custom categories, questions, answer types, and images.
-                Open on the <strong>same device</strong> as the classroom display (laptop connected to TV).
-            </div>
-        </div>
-
-        <!-- Hardware reference -->
-        <div class="card">
-            <div class="card-title">Hardware Reference</div>
-            <div class="hw-grid">
-                <div class="hw-item">
-                    <div class="hw-label">4 Buttons (MCQ)</div>
-                    A, B, C, D — student presses the matching answer
+        <div class="row-2up">
+            <!-- Controls -->
+            <div class="card">
+                <div class="card-title">Session Controls</div>
+                <div class="button-row">
+                    <button class="button button-secondary" onclick="endSession()">⏹ End Session</button>
+                    <button class="button button-danger"    onclick="resetLeaderboard()">🗑 Reset Leaderboard</button>
                 </div>
-                <div class="hw-item">
-                    <div class="hw-label">2 RFID Cards (TF)</div>
-                    Card A and Card B. Display shows what each card means per question
+                <button class="button button-download" onclick="downloadScoreboard()">📥 Download Scoreboard (CSV)</button>
+                <div class="info-box">
+                    <strong>End Session:</strong> stops the current student mid-quiz.<br>
+                    <strong>Reset Leaderboard:</strong> wipes all Top 3 scores permanently.<br>
+                    <strong>Download Scoreboard:</strong> exports every category's rankings + overall as a CSV file — opens straight in Google Sheets or Excel.
                 </div>
             </div>
-            <div class="info-box" style="margin-top:10px;">
-                <strong>Tip:</strong> Use 2 differently-coloured blank cards so students can tell them apart.
+
+            <!-- Question Builder link -->
+            <div class="card">
+                <div class="card-title">Question Bank</div>
+                <a class="builder-link" href="question-builder.html" target="_blank">
+                    ✏️ Open Question Builder
+                </a>
+                <div class="info-box">
+                    Add custom categories, questions, answer types, and images.
+                    Open on the <strong>same device</strong> as the classroom display (laptop connected to TV).
+                </div>
             </div>
         </div>
 

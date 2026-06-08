@@ -76,6 +76,29 @@
             .layout { grid-template-columns: 1fr; }
         }
 
+        /* ===== PHONE LAYOUT ===== */
+        @media (max-width: 600px) {
+            body { padding: 16px 12px 36px; }
+            .page-header h1 { font-size: 1.5em; }
+            .page-header p { font-size: 0.84em; padding: 0 6px; }
+
+            .panel { padding: 16px; }
+
+            /* Action bar: drop the spacer and let every button take equal
+               width so they form a tidy grid instead of an awkward wrap */
+            .top-bar { padding: 12px; gap: 8px; }
+            .top-bar .spacer { display: none; }
+            .top-bar .btn { flex: 1 1 calc(50% - 4px); justify-content: center; padding: 12px 14px; font-size: 0.9em; }
+
+            /* MCQ options read better stacked on a narrow screen */
+            .options-grid { grid-template-columns: 1fr; }
+
+            /* Editor buttons: full-width and stacked beat three squeezed
+               side-by-side buttons on a phone */
+            .editor-actions { flex-direction: column; }
+            .editor-actions .btn { width: 100%; justify-content: center; padding: 13px 16px; }
+        }
+
         /* ===== PANEL ===== */
         .panel {
             background: white;
@@ -134,9 +157,9 @@
             border: none;
             cursor: pointer;
             font-size: 0.95em;
-            padding: 3px 6px;
+            padding: 6px 8px;
             border-radius: 8px;
-            opacity: 0;
+            opacity: 0.4;
             transition: opacity 0.15s, background 0.15s;
         }
         .cat-item:hover .btn-icon { opacity: 1; }

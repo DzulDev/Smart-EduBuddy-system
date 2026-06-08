@@ -1,7 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python _generate_sounds.py)"
+      "Bash(python _generate_sounds.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(xxd)",
+      "Bash(curl -s https://api.jsonbin.io/v3/b/69e457a9aaba88219714735f/latest -H 'X-Master-Key: $2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO')",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const q = require\\('./questions.json'\\); console.log\\('Categories in questions.json:', Object.keys\\(q\\)\\);\")",
+      "Bash(curl *)",
+      "Bash(start *)",
+      "Bash(node --check dashboard.js)",
+      "Bash(node --check teacher-panel.js)",
+      "Bash(node --check /tmp/qb_script.js)",
+      "Bash(rm -f /tmp/qb_script.js)",
+      "Bash(node --check qb_script_tmp.js)",
+      "Bash(rm -f qb_script_tmp.js)",
+      "Bash(node *)",
+      "Bash(powershell -Command \"\\(Get-Item /tmp/qbank.json\\).Length\")",
+      "Bash(git checkout *)",
+      "Bash(git revert *)"
     ]
   }
 }

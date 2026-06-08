@@ -38,8 +38,8 @@
 #include <SPI.h>
 
 // ----- WiFi Configuration -----
-const char *ssid = "Dzul_2.4G";
-const char *password = "22022025";
+const char *ssid = "ESP32";
+const char *password = "123456789";
 
 // ----- MQTT Configuration -----
 const char *mqtt_server = "broker.hivemq.com"; // Public broker (replace with your own for privacy)
@@ -53,15 +53,15 @@ const char *topic_status = "edubuddy/status"; // Publish: device online/offline
 // ----- Pin Configuration -----
 #ifdef ESP32
 // RFID pins
-#define RST_PIN 22
-#define SS_PIN 5
+#define RST_PIN   22
+#define SS_PIN    5
 // Button pins (active-low, INPUT_PULLUP)
 #define BTN_A_PIN 25
 #define BTN_B_PIN 26
 #define BTN_C_PIN 27
 #define BTN_D_PIN 32
 // Status LED (built-in on most ESP32 dev boards)
-#define LED_PIN 2
+#define LED_PIN   2
 #define LED_ACTIVE_HIGH true // ESP32 built-in LED is active HIGH on most boards
 #else
 // NodeMCU ESP8266 fallback (only 2 buttons fit cleanly with RFID)
