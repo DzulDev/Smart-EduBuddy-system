@@ -499,6 +499,14 @@
 // =====================================================================
 
 const LS_KEY = 'edubuddy_custom_questions';
+
+// Cloud-synced question bank — same JSONBin account as the leaderboard,
+// separate bin. This is the source of truth so the Teacher Panel and
+// Student Display (any device) always see what was last saved here.
+const QUESTIONS_BIN_ID  = '6a2649f8f5f4af5e29c92e72';
+const QUESTIONS_BIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
+const QUESTIONS_BIN_URL = `https://api.jsonbin.io/v3/b/${QUESTIONS_BIN_ID}`;
+
 let bank = {};          // { categoryName: [questions] }
 let activeCat = null;   // currently selected category name
 let editIdx = null;     // index in bank[activeCat], null = new question
@@ -508,13 +516,54 @@ let currentImage = null; // base64 string or null
 // INIT
 // =====================================================================
 
+function bankHasCategories(b) {
+    const cats = Object.keys(b || {}).filter(k => !k.startsWith('_'));
+    return cats.length > 0;
+}
+
+async function fetchCloudBank() {
+    const res = await fetch(QUESTIONS_BIN_URL + '/latest', {
+        headers: { 'X-Master-Key': QUESTIONS_BIN_KEY }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    return json.record || {};
+}
+
+async function pushCloudBank(data) {
+    const res = await fetch(QUESTIONS_BIN_URL, {
+        method: 'PUT',
+        headers: {
+            'X-Master-Key': QUESTIONS_BIN_KEY,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+}
+
 async function init() {
-    // Try localStorage first
+    let cloudBank = null;
+    let cloudReachable = true;
+    try {
+        cloudBank = await fetchCloudBank();
+    } catch (e) {
+        cloudReachable = false;
+        console.warn('Failed to load question bank from cloud:', e);
+    }
+
+    if (bankHasCategories(cloudBank)) {
+        bank = cloudBank;
+        renderCategories();
+        showAlert('global', '☁️ Question bank loaded from the cloud. Make your changes and click Save All.', 'info');
+        return;
+    }
+
+    // Cloud is empty (or unreachable) — fall back to this device's local copy
     const stored = localStorage.getItem(LS_KEY);
     if (stored) {
         try { bank = JSON.parse(stored); } catch (_) { bank = {}; }
     }
-    // If empty, load from questions.json
     if (Object.keys(bank).length === 0) {
         try {
             const res = await fetch('questions.json');
@@ -526,7 +575,22 @@ async function init() {
         }
     }
     renderCategories();
-    showAlert('global', 'Question bank loaded. Make your changes and click Save All.', 'info');
+
+    // One-time migration: cloud reachable but empty, and we have local
+    // questions worth keeping — push them up so other devices see them too.
+    if (cloudReachable && !bankHasCategories(cloudBank) && bankHasCategories(bank)) {
+        try {
+            await pushCloudBank(bank);
+            showAlert('global', '☁️ Migrated your local questions to the cloud — every device will now see them.', 'success');
+            return;
+        } catch (e) {
+            console.warn('Cloud migration failed:', e);
+        }
+    }
+
+    showAlert('global', cloudReachable
+        ? 'Question bank loaded. Make your changes and click Save All.'
+        : '⚠️ Could not reach the cloud — showing your local copy. Save All will retry syncing.', 'info');
 }
 
 // =====================================================================
@@ -806,7 +870,7 @@ function removeImage() {
 // SAVE / EXPORT / IMPORT
 // =====================================================================
 
-function saveAll() {
+async function saveAll() {
     // Validate: every category must have at least 1 question
     const cats = Object.keys(bank);
     if (cats.length === 0) {
@@ -817,8 +881,16 @@ function saveAll() {
     if (empty.length > 0) {
         if (!confirm('These categories have 0 questions: ' + empty.join(', ') + '. Save anyway?')) return;
     }
+
     localStorage.setItem(LS_KEY, JSON.stringify(bank));
-    showAlert('global', '✅ Saved! The dashboard will use these questions on next session start.', 'success');
+    showAlert('global', '☁️ Syncing to the cloud...', 'info');
+    try {
+        await pushCloudBank(bank);
+        showAlert('global', '✅ Saved to the cloud! Every device (TV, laptops) will use these questions on next session start.', 'success');
+    } catch (e) {
+        console.warn('Cloud save failed:', e);
+        showAlert('global', '⚠️ Saved on this device, but cloud sync failed — other devices may not see these changes yet. Try Save All again when online.', 'error');
+    }
 }
 
 function resetToDefault() {

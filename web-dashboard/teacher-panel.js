@@ -6,6 +6,13 @@ const JSONBIN_ID  = '69e457a9aaba88219714735f';
 const JSONBIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 
+// Cloud-synced question bank — same source the Question Builder saves to
+// and the Student Display loads from, so this dropdown always matches
+// what will actually play, regardless of this device's own localStorage.
+const QUESTIONS_BIN_ID  = '6a2649f8f5f4af5e29c92e72';
+const QUESTIONS_BIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
+const QUESTIONS_BIN_URL = `https://api.jsonbin.io/v3/b/${QUESTIONS_BIN_ID}`;
+
 const MQTT_TOPICS = {
     sessionStart: 'edubuddy/session/start',
     sessionEnd:   'edubuddy/session/end',
@@ -212,19 +219,35 @@ function showAlert(message, type) {
 
 // ----- Load categories from localStorage -----
 
-function loadCategoryOptions() {
+async function loadCategoryOptions() {
     const sel = document.getElementById('start-category');
     sel.innerHTML = '';
 
     let cats = [];
 
+    // Cloud bin is the source of truth — same one the Question Builder
+    // saves to and the Student Display loads from.
     try {
-        const stored = localStorage.getItem('edubuddy_custom_questions');
-        if (stored) {
-            const bank = JSON.parse(stored);
-            cats = Object.keys(bank).filter(k => !k.startsWith('_'));
+        const res = await fetch(QUESTIONS_BIN_URL + '/latest', {
+            headers: { 'X-Master-Key': QUESTIONS_BIN_KEY }
+        });
+        if (res.ok) {
+            const json = await res.json();
+            const bank = json.record || {};
+            cats = Object.keys(bank).filter(k => !k.startsWith('_') && Array.isArray(bank[k]) && bank[k].length > 0);
         }
     } catch (_) {}
+
+    // Offline fallback — this device's own localStorage
+    if (cats.length === 0) {
+        try {
+            const stored = localStorage.getItem('edubuddy_custom_questions');
+            if (stored) {
+                const bank = JSON.parse(stored);
+                cats = Object.keys(bank).filter(k => !k.startsWith('_') && Array.isArray(bank[k]) && bank[k].length > 0);
+            }
+        } catch (_) {}
+    }
 
     if (cats.length === 0) {
         const opt = document.createElement('option');
@@ -246,8 +269,8 @@ function loadCategoryOptions() {
 
 // ----- Boot -----
 
-window.addEventListener('DOMContentLoaded', () => {
-    loadCategoryOptions();
+window.addEventListener('DOMContentLoaded', async () => {
+    await loadCategoryOptions();
     initializeMQTT();
 
     // Mode change listener

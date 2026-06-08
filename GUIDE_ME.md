@@ -19,7 +19,7 @@ Teachers can create **custom categories and questions**. Students answer using p
 | Teacher Panel | Teacher's phone or laptop | https://smart-edubuddy-system.pages.dev/teacher-panel.html |
 | Question Builder | Teacher edits questions (laptop only) | https://smart-edubuddy-system.pages.dev/question-builder.html |
 
-> **Note:** The Question Builder must be opened on the **same laptop as the Student Display** — they share browser storage (localStorage). Opening it on a different device will not affect the classroom session.
+> **Note:** Custom questions are now synced to the cloud — open the Question Builder on **any** device (phone, laptop, doesn't matter), click **Save All**, and every Student Display + Teacher Panel will pick up the new questions automatically on the next session. (Make sure the device is online when you click Save All — that's what pushes the changes to the cloud.)
 
 ---
 
@@ -100,9 +100,9 @@ Student finds the correct card and taps it on the reader.
 
 ---
 
-## Question Builder (Teacher — Laptop Only)
+## Question Builder (Teacher — Any Device)
 
-Open `question-builder.html` on the **same laptop as the dashboard** (they share storage).
+Open `question-builder.html` on whichever device is convenient — phone, laptop, tablet. Custom questions sync to the cloud when you click **Save All**, so the device you edit on doesn't need to match the Student Display or Teacher Panel.
 
 ### Creating Categories
 
@@ -203,8 +203,9 @@ Same process — tap each hunt card, copy UIDs, paste into `dashboard.js`:
 | MQTT dot is red | Check internet connection |
 | Device dot is red | ESP32 not connected to WiFi or MQTT |
 | Card tap not recognized | Check UIDs in `TF_CARD_MAP` in `dashboard.js` |
-| Custom questions not showing | Open Question Builder on laptop → Save All → restart session |
-| Category dropdown empty in Teacher Panel | Open Question Builder → Save All first, then refresh Teacher Panel |
+| Custom questions not showing on a device | Open Question Builder (any device) → Save All while online → restart session. Each device fetches the latest cloud bank fresh on every session start |
+| Category dropdown empty in Teacher Panel | Open Question Builder → Save All first (needs internet to sync to the cloud), then refresh Teacher Panel |
+| "Saved on this device, but cloud sync failed" | The Question Builder device is offline or the cloud is unreachable — questions are cached locally; click Save All again once back online |
 | No sound | Click anywhere on the page first to unlock audio |
 
 ---
