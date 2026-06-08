@@ -543,6 +543,27 @@
         }
         .status-bar .dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
 
+        /* ===== WARNING TOAST ===== */
+        .warning-toast {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-140%);
+            background: linear-gradient(135deg, #ffd166, #ffb347);
+            color: #5a3d00;
+            padding: 16px 30px;
+            border-radius: 18px;
+            font-size: 1.15em;
+            font-weight: 800;
+            box-shadow: 0 10px 28px rgba(255,180,50,0.45);
+            z-index: 1100;
+            max-width: 88%;
+            text-align: center;
+            line-height: 1.4;
+            transition: transform 0.4s ease;
+        }
+        .warning-toast.show { transform: translateX(-50%) translateY(0); }
+
         /* ===== Animations ===== */
         @keyframes fadeIn   { from { opacity: 0; }          to { opacity: 1; } }
         @keyframes scaleIn  { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -732,6 +753,9 @@
         </section>
 
     </div>
+
+    <!-- Warning Toast -->
+    <div class="warning-toast" id="warning-toast"></div>
 
     <!-- Status bar -->
     <div class="status-bar">

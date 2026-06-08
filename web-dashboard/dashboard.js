@@ -366,6 +366,12 @@ function startSession(name, startCategory, mode) {
     cancelAllTimers();
     hideFeedbackOverlay();
 
+    if (startCategory && !catOrder.includes(startCategory)) {
+        const fallback = getCategoryDisplay(catOrder[0]);
+        console.warn(`startCategory "${startCategory}" not found in this device's question bank — falling back to "${catOrder[0]}". The Teacher Panel and this display may have different question banks in localStorage.`);
+        showWarningToast(`⚠️ Category "${escapeHtml(startCategory)}" not found on this display — starting with ${fallback.emoji} ${escapeHtml(fallback.label)} instead.<br>Check that the Question Builder, Teacher Panel, and this display are all on the same device.`);
+    }
+
     const startIdx = catOrder.includes(startCategory) ? catOrder.indexOf(startCategory) : 0;
     const rotated = catOrder.map((_, i) => catOrder[(startIdx + i) % catOrder.length]);
 
@@ -842,6 +848,16 @@ function setMqttDot(online) {
 
 function setDeviceDot(online) {
     document.getElementById('device-dot').classList.toggle('online', !!online);
+}
+
+let warningToastTimer = null;
+function showWarningToast(message) {
+    const toast = document.getElementById('warning-toast');
+    if (!toast) return;
+    toast.innerHTML = message;
+    toast.classList.add('show');
+    if (warningToastTimer) clearTimeout(warningToastTimer);
+    warningToastTimer = setTimeout(() => toast.classList.remove('show'), 8000);
 }
 
 function shuffle(arr) {

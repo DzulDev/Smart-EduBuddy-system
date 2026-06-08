@@ -233,6 +233,14 @@
         }
         .button-danger:hover { box-shadow: 0 8px 24px rgba(231,76,60,0.4); }
 
+        .button-download {
+            background: linear-gradient(135deg, var(--green), var(--green2));
+            color: white;
+            box-shadow: 0 6px 20px rgba(17,153,142,0.25);
+            margin-top: 12px;
+        }
+        .button-download:hover { box-shadow: 0 8px 24px rgba(17,153,142,0.4); }
+
         .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
         /* ===== NEXT CATEGORY CARD ===== */
@@ -428,9 +436,11 @@
                 <button class="button button-secondary" onclick="endSession()">⏹ End Session</button>
                 <button class="button button-danger"    onclick="resetLeaderboard()">🗑 Reset Leaderboard</button>
             </div>
+            <button class="button button-download" onclick="downloadScoreboard()">📥 Download Scoreboard (CSV)</button>
             <div class="info-box">
                 <strong>End Session:</strong> stops the current student mid-quiz.<br>
-                <strong>Reset Leaderboard:</strong> wipes all Top 3 scores permanently.
+                <strong>Reset Leaderboard:</strong> wipes all Top 3 scores permanently.<br>
+                <strong>Download Scoreboard:</strong> exports every category's rankings + overall as a CSV file — opens straight in Google Sheets or Excel.
             </div>
         </div>
 

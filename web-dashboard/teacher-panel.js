@@ -1,6 +1,11 @@
 // Teacher Control Panel JavaScript
 
 const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+
+const JSONBIN_ID  = '69e457a9aaba88219714735f';
+const JSONBIN_KEY = '$2a$10$PYp3OZ18bCHM9rs7gHZHW.eah1Aj6Vw1c3IRiSYcNwp/P.Hx1t9KO';
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+
 const MQTT_TOPICS = {
     sessionStart: 'edubuddy/session/start',
     sessionEnd:   'edubuddy/session/end',
@@ -112,6 +117,55 @@ function endSession() {
     mqttClient.publish(MQTT_TOPICS.sessionEnd, '1');
     showAlert('Session ended.', 'success');
     setSessionActive(false);
+}
+
+async function downloadScoreboard() {
+    let board;
+    try {
+        const res  = await fetch(JSONBIN_URL + '/latest', {
+            headers: { 'X-Master-Key': JSONBIN_KEY }
+        });
+        const json = await res.json();
+        board = json.record || {};
+    } catch (e) {
+        showAlert('Failed to fetch scoreboard from cloud!', 'error');
+        return;
+    }
+
+    const categories = Object.keys(board).filter(k => k !== 'overall' && board[k] && board[k].length);
+    const orderedCats = [...categories, 'overall'].filter(k => board[k] && board[k].length);
+
+    if (orderedCats.length === 0) {
+        showAlert('Scoreboard is empty — nothing to download.', 'error');
+        return;
+    }
+
+    const rows = [['Category', 'Rank', 'Name', 'Score', 'Time (s)']];
+    orderedCats.forEach(cat => {
+        const label = cat === 'overall' ? 'Overall' : cat.charAt(0).toUpperCase() + cat.slice(1);
+        board[cat].forEach((entry, i) => {
+            const time = entry.time !== undefined ? (entry.time / 1000).toFixed(1) : '';
+            rows.push([label, i + 1, entry.name, entry.score, time]);
+        });
+    });
+
+    const csv = rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `edubuddy_scoreboard_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showAlert('Scoreboard downloaded! Open it in Google Sheets 📥', 'success');
+}
+
+function csvEscape(value) {
+    const str = String(value);
+    return /[",\r\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
 }
 
 function resetLeaderboard() {
