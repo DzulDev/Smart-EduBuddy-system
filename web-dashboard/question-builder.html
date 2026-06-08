@@ -356,13 +356,13 @@
 <div class="page-wrap">
     <div class="page-header">
         <h1>Question Builder</h1>
-        <p>Open this on the <strong>laptop (dashboard device)</strong> — changes save to this device's local storage.</p>
+        <p>Open this on <strong>any device</strong> — click <strong>Save All</strong> while online and every Student Display + Teacher Panel will pick up the changes automatically.</p>
     </div>
 
     <!-- Top action bar -->
     <div class="top-bar">
         <button class="btn btn-success" onclick="saveAll()">💾 Save All</button>
-        <button class="btn btn-outline" onclick="resetToDefault()">↩ Reset to Default</button>
+        <button class="btn btn-outline" onclick="resetToDefault()">🗑️ Clear All</button>
         <div class="spacer"></div>
         <button class="btn btn-neutral btn-sm" onclick="exportJSON()">📤 Export JSON</button>
         <label class="btn btn-neutral btn-sm" style="cursor:pointer;">
@@ -422,7 +422,7 @@
                     <div class="image-upload-area" onclick="document.getElementById('img-upload').click()">
                         <input type="file" id="img-upload" accept="image/*" onchange="onImageUpload(this)" onclick="event.stopPropagation()">
                         <img id="img-preview" class="image-preview" src="" alt="">
-                        <div class="image-upload-hint" id="img-hint">Click to upload an image (optional, max 500KB)</div>
+                        <div class="image-upload-hint" id="img-hint">Click to upload an image (optional — auto-resized to fit the cloud)</div>
                     </div>
                     <button class="btn btn-danger btn-sm" id="img-remove-btn" onclick="removeImage()" style="margin-top:8px;display:none">Remove Image</button>
                 </div>
@@ -838,23 +838,85 @@ function onTypeChange() {
 // IMAGE HANDLING
 // =====================================================================
 
+// Cloud bin has a 100KB-per-record cap, and a category can hold many
+// questions — so every image is resized + JPEG-recompressed down to
+// roughly 4-5KB on upload. This keeps a full question bank with images
+// well under the limit. Quality loss is permanent once saved (see
+// "Export JSON" for a backup before bulk image changes).
+const IMAGE_MAX_WIDTH   = 150;
+const IMAGE_MAX_HEIGHT  = 112;
+const IMAGE_JPEG_QUALITY = 0.55;
+// Images already smaller than this (e.g. ones this same pipeline already
+// produced) are left alone on save — avoids generational JPEG quality loss
+// from recompressing the same image on every Save All.
+const IMAGE_RECOMPRESS_THRESHOLD = 15 * 1024;
+
+function loadImageEl(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload  = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+}
+
+function compressImageEl(img) {
+    const scale = Math.min(IMAGE_MAX_WIDTH / img.width, IMAGE_MAX_HEIGHT / img.height, 1);
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+}
+
 function onImageUpload(input) {
     const file = input.files[0];
     if (!file) return;
-    if (file.size > 500 * 1024) {
-        alert('Image too large (max 500KB). Please resize it first.');
+    if (!file.type.startsWith('image/')) {
+        alert('Please choose an image file.');
         input.value = '';
         return;
     }
+
     const reader = new FileReader();
     reader.onload = (e) => {
-        currentImage = e.target.result;
-        document.getElementById('img-preview').src = currentImage;
-        document.getElementById('img-preview').style.display = 'block';
-        document.getElementById('img-hint').style.display = 'none';
-        document.getElementById('img-remove-btn').style.display = '';
+        loadImageEl(e.target.result).then((img) => {
+            currentImage = compressImageEl(img);
+            document.getElementById('img-preview').src = currentImage;
+            document.getElementById('img-preview').style.display = 'block';
+            document.getElementById('img-hint').style.display = 'none';
+            document.getElementById('img-remove-btn').style.display = '';
+        }).catch(() => {
+            alert('Could not read that image. Please try a different file.');
+            input.value = '';
+        });
+    };
+    reader.onerror = () => {
+        alert('Could not read that file.');
+        input.value = '';
     };
     reader.readAsDataURL(file);
+}
+
+// Older questions may still carry full-size images saved before this
+// compression pipeline existed (or images imported from a JSON backup).
+// Walk the bank and shrink any oversized ones in place before syncing —
+// this is what actually clears the 100KB cloud cap for banks with history.
+async function recompressOversizedImages() {
+    let fixed = 0;
+    for (const cat of Object.keys(bank)) {
+        const qs = bank[cat];
+        if (!Array.isArray(qs)) continue;
+        for (const q of qs) {
+            if (typeof q.image !== 'string' || q.image.length <= IMAGE_RECOMPRESS_THRESHOLD) continue;
+            try {
+                const img = await loadImageEl(q.image);
+                q.image = compressImageEl(img);
+                fixed++;
+            } catch (_) { /* leave unreadable images as-is */ }
+        }
+    }
+    return fixed;
 }
 
 function removeImage() {
@@ -882,24 +944,36 @@ async function saveAll() {
         if (!confirm('These categories have 0 questions: ' + empty.join(', ') + '. Save anyway?')) return;
     }
 
+    showAlert('global', '🗜️ Optimizing images...', 'info');
+    const fixed = await recompressOversizedImages();
+
     localStorage.setItem(LS_KEY, JSON.stringify(bank));
     showAlert('global', '☁️ Syncing to the cloud...', 'info');
     try {
         await pushCloudBank(bank);
-        showAlert('global', '✅ Saved to the cloud! Every device (TV, laptops) will use these questions on next session start.', 'success');
+        const note = fixed > 0 ? ` (auto-shrunk ${fixed} older image${fixed === 1 ? '' : 's'} to fit)` : '';
+        showAlert('global', `✅ Saved to the cloud!${note} Every device (TV, laptops) will use these questions on next session start.`, 'success');
     } catch (e) {
         console.warn('Cloud save failed:', e);
         showAlert('global', '⚠️ Saved on this device, but cloud sync failed — other devices may not see these changes yet. Try Save All again when online.', 'error');
     }
 }
 
-function resetToDefault() {
-    if (!confirm('Remove all custom questions and restore the built-in defaults?')) return;
+async function resetToDefault() {
+    if (!confirm('Remove ALL categories and questions and start with an empty bank? Export JSON first if you want a backup — this only takes effect everywhere once you click Save All.')) return;
     localStorage.removeItem(LS_KEY);
     bank = {};
     activeCat = null;
-    init();
-    showAlert('global', 'Reset to default questions.', 'info');
+
+    renderCategories();
+    document.getElementById('q-list').innerHTML = '';
+    document.getElementById('q-list-title').textContent = 'Select a category';
+    document.getElementById('add-q-btn').style.display = 'none';
+    document.getElementById('q-empty').style.display = 'block';
+    document.getElementById('q-empty').textContent = '👈 Select a category from the left';
+    cancelEdit();
+
+    showAlert('global', 'Cleared! The question bank is now empty. Click Save All to apply this everywhere, or Import JSON to restore from a backup.', 'info');
 }
 
 function exportJSON() {
