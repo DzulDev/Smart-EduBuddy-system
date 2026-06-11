@@ -388,7 +388,8 @@ function startSession(name, startCategory, mode) {
         scoreByCat,
         totalScore: 0,
         timeByCat:  {},
-        totalTime:  0
+        totalTime:  0,
+        catTimeSpent: 0
     };
 
     console.log('Session started:', session);
@@ -439,9 +440,6 @@ function showCurrentQuestion() {
     const progress = `Q ${session.qIdx + 1} / ${session.questions.length}`;
     const studentTag = (session.mode === 'test') ? session.name : '';
 
-    if (session.qIdx === 0) {
-        session.catTimeSpent = 0;
-    }
     startTimer();
     session.qStartTime = Date.now();
 
@@ -542,11 +540,17 @@ function scoreAnswer(isCorrect) {
 
     pendingTimers.push(setTimeout(() => {
         hideFeedbackOverlay();
-        advanceAfterAnswer();
+        advanceAfterAnswer(isCorrect);
     }, TIMING.feedbackDuration));
 }
 
-function advanceAfterAnswer() {
+function advanceAfterAnswer(isCorrect) {
+    // Learning mode: retry the same question until the student gets it right
+    if (session.mode === 'learning' && !isCorrect) {
+        showCurrentQuestion();
+        return;
+    }
+
     session.qIdx++;
     if (session.qIdx < session.questions.length) {
         showCurrentQuestion();
@@ -620,6 +624,7 @@ function advanceToNextCategory() {
     } else {
         session.catIdx++;
         session.qIdx = 0;
+        session.catTimeSpent = 0;
         const newCat = session.categories[session.catIdx];
         session.questions = shuffle(questionBank[newCat].slice());
         pendingTimers.push(setTimeout(() => runCountdown(newCat), TIMING.betweenCategories));
