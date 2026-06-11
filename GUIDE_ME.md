@@ -31,6 +31,7 @@ Teachers can create **custom categories and questions**. Students answer using p
 | Leaderboard (Top 3) | Not shown | Shown after each category |
 | Final score | Yes | Yes |
 | Category switching | Manual (teacher) | Manual (teacher) |
+| Wrong answer | Try again on the same question until correct | Moves on to the next question |
 
 ---
 

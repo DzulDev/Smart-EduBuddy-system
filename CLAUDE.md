@@ -42,6 +42,7 @@ The system is **not** a build-tooled app — there is no `package.json`, no bund
 | Top 3 leaderboard | Hidden | Shown after each category + final |
 | Final score | Shown | Shown |
 | Category advance | Manual (teacher MQTT signal) | Manual (teacher MQTT signal) |
+| Wrong answer | Same question repeats (reshuffled if MCQ) until correct | Advances to next question regardless |
 
 ## Session Flow
 
