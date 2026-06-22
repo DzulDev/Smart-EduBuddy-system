@@ -163,6 +163,51 @@ async function downloadScoreboard() {
     showAlert('Scoreboard downloaded! Open it in Google Sheets 📥', 'success');
 }
 
+function downloadWrongReport(mode) {
+    const all = JSON.parse(localStorage.getItem('edubuddy_session_log') || '[]');
+    const log = all.filter(r => r.mode === mode);
+
+    if (log.length === 0) {
+        showAlert(`No ${mode === 'test' ? 'Test' : 'Learning'} Mode sessions recorded yet.`, 'error');
+        return;
+    }
+
+    const isLearning = mode === 'learning';
+    const wrongHeader = isLearning ? 'Attempts' : 'Wrong';
+    const rows = [['Date', 'Student', 'Category', 'Correct', wrongHeader, 'Total Questions', 'Time (s)']];
+    log.forEach(record => {
+        const date = new Date(record.date).toLocaleString();
+        record.categories.forEach(c => {
+            const label = c.cat.charAt(0).toUpperCase() + c.cat.slice(1);
+            rows.push([date, record.name, label, c.correct, c.wrong, c.total, (c.timeMs / 1000).toFixed(1)]);
+
+            if (isLearning && c.attemptsByQ) {
+                Object.entries(c.attemptsByQ)
+                    .filter(([, count]) => count > 1)
+                    .sort((a, b) => b[1] - a[1])
+                    .forEach(([qText, count]) => {
+                        rows.push(['', '', `  ↳ ${qText}`, '', count, '', '']);
+                    });
+            }
+        });
+        const totalQ = record.categories.reduce((s, c) => s + c.total, 0);
+        rows.push([date, record.name, `All Categories (${record.name})`, record.totalCorrect, record.totalWrong, totalQ, (record.totalTimeMs / 1000).toFixed(1)]);
+        rows.push([]);
+    });
+
+    const csv = rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `edubuddy_${mode}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showAlert(`${mode === 'test' ? 'Test' : 'Learning'} Mode report downloaded! 📊`, 'success');
+}
+
 function csvEscape(value) {
     const str = String(value);
     return /[",\r\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;

@@ -376,7 +376,8 @@ function startSession(name, startCategory, mode) {
     const rotated = catOrder.map((_, i) => catOrder[(startIdx + i) % catOrder.length]);
 
     const scoreByCat = {};
-    rotated.forEach(c => scoreByCat[c] = 0);
+    const wrongByCat = {};
+    rotated.forEach(c => { scoreByCat[c] = 0; wrongByCat[c] = 0; });
 
     session = {
         name:       name,
@@ -386,6 +387,8 @@ function startSession(name, startCategory, mode) {
         questions:  shuffle(questionBank[rotated[0]].slice()),
         qIdx:       0,
         scoreByCat,
+        wrongByCat,
+        attemptsByQ: {},
         totalScore: 0,
         timeByCat:  {},
         totalTime:  0,
@@ -534,6 +537,14 @@ function scoreAnswer(isCorrect) {
     if (isCorrect) {
         session.scoreByCat[cat]++;
         session.totalScore++;
+    } else {
+        session.wrongByCat[cat]++;
+    }
+
+    if (session.mode === 'learning') {
+        const qText = session.questions[session.qIdx].q;
+        if (!session.attemptsByQ[cat]) session.attemptsByQ[cat] = {};
+        session.attemptsByQ[cat][qText] = (session.attemptsByQ[cat][qText] || 0) + 1;
     }
 
     showFeedback(isCorrect);
@@ -637,6 +648,8 @@ function showFinalScoreboard() {
     const totalMax = session.categories.reduce((sum, c) => sum + questionBank[c].length, 0);
 
     const finalTimeEl = document.getElementById('final-time');
+    saveSessionLog();
+
     if (session.mode === 'test') {
         pushToLeaderboard('overall', session.name, session.totalScore, session.totalTime);
         document.getElementById('final-name').textContent = session.name + "'s Final Score";
@@ -664,6 +677,28 @@ function showFinalScoreboard() {
     showScreen('final-scoreboard');
     playSound('finalboard');
     spawnConfetti();
+}
+
+function saveSessionLog() {
+    const record = {
+        date: new Date().toISOString(),
+        mode: session.mode,
+        name: session.name || 'Anonymous',
+        categories: session.categories.map(cat => ({
+            cat,
+            correct:    session.scoreByCat[cat]  || 0,
+            wrong:      session.wrongByCat[cat]   || 0,
+            total:      questionBank[cat] ? questionBank[cat].length : 0,
+            timeMs:     session.timeByCat[cat]    || 0,
+            attemptsByQ: session.attemptsByQ[cat] || {}
+        })),
+        totalCorrect: session.totalScore,
+        totalWrong:   session.categories.reduce((s, c) => s + (session.wrongByCat[c] || 0), 0),
+        totalTimeMs:  session.totalTime || 0
+    };
+    const log = JSON.parse(localStorage.getItem('edubuddy_session_log') || '[]');
+    log.push(record);
+    localStorage.setItem('edubuddy_session_log', JSON.stringify(log));
 }
 
 function endSessionAndReturnToIdle() {

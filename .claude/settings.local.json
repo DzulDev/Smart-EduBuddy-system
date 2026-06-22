@@ -21,7 +21,18 @@
       "Bash(powershell -Command \"\\(Get-Item /tmp/qbank.json\\).Length\")",
       "Bash(git checkout *)",
       "Bash(git revert *)",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :5501)",
+      "Bash(findstr LISTENING)",
+      "Bash(findstr -E \":\\(5500|5501|5502|8000|8080|3000|5173\\)\")",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" status)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff --stat HEAD)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff web-dashboard/dashboard.js web-dashboard/teacher-panel.html web-dashboard/teacher-panel.js --stat)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff web-dashboard/ --name-only)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff web-dashboard/dashboard.js)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff web-dashboard/teacher-panel.js)",
+      "Bash(git -C \"c:\\\\Users\\\\dzulkarnain_tanalink\\\\OneDrive\\\\Desktop\\\\Smart EduBuddy system webapps\" diff web-dashboard/teacher-panel.html)"
     ]
   }
 }

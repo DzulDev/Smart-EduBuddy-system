@@ -237,27 +237,19 @@
         }
         .button-primary:hover { box-shadow: 0 8px 24px rgba(102,126,234,0.5); }
 
-        .button-secondary {
-            background: linear-gradient(135deg, #f093fb 0%, var(--pink) 100%);
-            color: white;
-            box-shadow: 0 6px 20px rgba(245,87,108,0.3);
+        .button-secondary, .button-danger, .button-download {
+            background: #f0f3ff;
+            color: var(--brand);
+            border: 2px dashed var(--brand);
+            box-shadow: none;
         }
-        .button-secondary:hover { box-shadow: 0 8px 24px rgba(245,87,108,0.45); }
-
-        .button-danger {
-            background: linear-gradient(135deg, #ff6b6b, var(--danger));
-            color: white;
-            box-shadow: 0 6px 20px rgba(231,76,60,0.25);
+        .button-secondary:hover, .button-danger:hover, .button-download:hover {
+            background: #e4e9ff;
+            border-color: var(--brand2);
+            box-shadow: none;
+            color: var(--brand2);
         }
-        .button-danger:hover { box-shadow: 0 8px 24px rgba(231,76,60,0.4); }
-
-        .button-download {
-            background: linear-gradient(135deg, var(--green), var(--green2));
-            color: white;
-            box-shadow: 0 6px 20px rgba(17,153,142,0.25);
-            margin-top: 12px;
-        }
-        .button-download:hover { box-shadow: 0 8px 24px rgba(17,153,142,0.4); }
+        .button-download { margin-top: 12px; }
 
         .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
@@ -430,11 +422,15 @@
                     <button class="button button-secondary" onclick="endSession()">⏹ End Session</button>
                     <button class="button button-danger"    onclick="resetLeaderboard()">🗑 Reset Leaderboard</button>
                 </div>
-                <button class="button button-download" onclick="downloadScoreboard()">📥 Download Scoreboard (CSV)</button>
+                <div class="button-row">
+                    <button class="button button-download" onclick="downloadWrongReport('test')">📊 Test Mode Report</button>
+                    <button class="button button-download" onclick="downloadWrongReport('learning')">📗 Learning Mode Report</button>
+                </div>
                 <div class="info-box">
                     <strong>End Session:</strong> stops the current student mid-quiz.<br>
                     <strong>Reset Leaderboard:</strong> wipes all Top 3 scores permanently.<br>
-                    <strong>Download Scoreboard:</strong> exports every category's rankings + overall as a CSV file — opens straight in Google Sheets or Excel.
+                    <strong>Test Mode Report:</strong> per-student, per-category correct &amp; wrong counts (Test sessions only).<br>
+                    <strong>Learning Mode Report:</strong> per-student, per-category correct &amp; attempts counts — attempts = retries before getting it right.
                 </div>
             </div>
 
