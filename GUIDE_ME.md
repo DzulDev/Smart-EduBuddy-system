@@ -98,7 +98,8 @@ Student finds the correct card and taps it on the reader.
 
 - Click **⏹ End Session** to go back to the waiting screen
 - Click **🗑 Reset Leaderboard** to wipe all scores and start fresh
-- Click **📥 Download Scoreboard (CSV)** to save every category's rankings plus the overall leaderboard as a CSV file — opens straight in Google Sheets or Excel, handy for keeping records or sharing with parents
+- Click **📊 Test Mode Report** to download a CSV of all Test Mode sessions — per-student, per-category correct & wrong counts with time taken
+- Click **📗 Learning Mode Report** to download a CSV of all Learning Mode sessions — per-student, per-category correct & attempt counts, plus a per-question breakdown showing which questions needed more than one try
 
 ---
 
